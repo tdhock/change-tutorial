@@ -1,0 +1,13 @@
+** TODOs
+
+Copy and adapt tutorial materials from [[https://github.com/eRum2016/Workshops/blob/master/details/An%2520introduction%2520to%2520changepoint%2520models%2520using%2520R.md][Rebecca's eRum2016 workshop]].
+
+Scripts or Rmds for different steps in the supervised penalty learning
+process.
+
+** 25 Nov 2016
+
+Begin [[file:breakpoint.learning.cv.R]] which will read
+[[file:breakpoint.learning.RData]] and estimate breakpoint predicted test
+error via 6-fold cross-validation (including BIC, mBIC, supervised
+penalty learning via iregnet).
