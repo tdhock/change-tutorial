@@ -2,19 +2,11 @@
 
 ## Instructors
 
-Rebecca Killick (Lancaster University, UK)
-
 Toby Dylan Hocking (McGill University, Montreal, Canada) toby.hocking@r-project.org
 
-## Short Instructor Biography
+Rebecca Killick (Lancaster University, UK) r.killick@lancs.ac.uk
 
-Rebecca Killick is a Lecturer in Statistics at the University of
-Lancaster. Her research is in developing methodology for the analysis
-of nonstationary time series to address real world problems.  She has
-taught a range of courses over the last 10 years from first year
-undergraduate introductory courses to PhD level courses including
-theoretical and practical courses. **TODO** discuss R packages you
-have developed, any awards you have won, and your previous eRum tutorial.
+## Short Instructor Biography
 
 Toby Dylan Hocking is a post-doctoral researcher, working on new
 machine learning models for genomic data. He has implemented several R
@@ -24,16 +16,24 @@ packages, including directlabels (won best student poster at useR2011)
 and animint (presented in a JSM2015 invited session and a useR2016
 tutorial).
 
+Rebecca Killick is a Lecturer in Statistics at the University of
+Lancaster. Her research is in developing methodology for the analysis
+of nonstationary time series to address real world problems.  She has
+taught a range of courses over the last 10 years from first year
+undergraduate introductory courses to PhD level courses both
+theoretical and practical. She has created and contributed to several R packages on changepoint detection including changepoint, changepoint.np, EnvCpt and delivered a workshop on changepoint detection at eRum2016. Her code has been adapted for delivery in commercial software and is available as part of the NAG libraries.
+
 ## Brief description of Tutorial
  
 TODO: should we shorten this first paragraph to make this description more "brief"?
+RK: agreed, do you want to take a stab at this as i've written this paragraph so many times already :-)
 
 More data is being collected in the world today than ever before
 resulting in larger and longer data sets. With the length of data sets
 increasing, the statistical properties of the data are likely to
 change over time. Traditional statistical methods often make the
 assumption that the statistical properties do not change over time and
-thus can lead to incorrect conclusions when changes occur. A common
+thus can lead to incorrect inferences when changes are present. A common
 method for relaxing this assumption is to segment the data into
 smaller periods within which the statistical properties do not
 change. One advantage of this technique is that the traditional
@@ -43,18 +43,20 @@ as changepoints.
 
 This course introduces participants to the analysis of changepoint
 models (also known as time series segmentation or structural
-changes). It is interactive and uses packages available on CRAN and
+changes). It is highly interactive and uses packages available on CRAN and
 GitHub.
 
 Techniques covered in this course include: likelihood and
-nonparametric methods for detecting changes in mean, regression and
+nonparametric methods for detecting changes in mean and
 variance. We will also cover supervised changepoint detection methods
 for labeled time series data sets. Each topic is explained
 theoretically and there will be break outs where participants will use
 the techniques on real data sets from a variety of application areas
-including finance, genomics and environment.
+including finance, genomics and the environment.
  
 ## Goals
+
+TODO: update the following with Toby's goals
 
 Following the course participants will be able to:
 * recognize datasets that potentially contain changepoints
@@ -65,15 +67,26 @@ Following the course participants will be able to:
  
 ## Detailed Outline
 
+RK: Any chance of doing a 70/90 split given i'm covering the "what is a changepoint" material too?  I did the last session in 3 hours so trying to cram the same content in less than half the time isn't going to work.
+
 ### Rebecca, 80 minutes
 
-* What is changepoint analysis?
-* Types of changepoints
-* Methods for detecting changepoints (bulk of course)
-- Nonparametric
-- Likelihood
-* Checking assumptions
-* Summarizing results of a changepoint analysis
+#### What is changepoint analysis and the different types of changepoints? 10 minutes
+
+#### Methods for detecting changepoints. 55 minutes
+
+* Single and multiple changepoint detection algorithms
+* Likelihood based approaches
+* Non parametric approaches
+* Choosing the number of changes
+* Demonstration using changepoint and changepoint.np packages
+
+#### Checking assumptions and summarizing results of a changepoint analysis. 15 minutes
+
+* In changepoint detection you cannot check assumptions such as Normality prior to analysis as the changes influence any diagnostics you may perform.
+* Demonstation assumption checking using changepoint package and previous class exercises.
+
+
 
 ### Toby, Supervised changepoint detection, 80 minutes
 
