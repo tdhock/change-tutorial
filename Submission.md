@@ -120,16 +120,16 @@ change-point detection from the R command line.
 * Compute a feature vector for each segmentation problem, and a
   feature matrix for each labeled set of related segmentation
   problems.
+* Learn an affine function f(features)=log(penalty).
 * Exercise: to learn the coefficients of the BIC penalty, what feature
   vector should be used?
-* Learn an affine function f(features)=log(penalty) via either
-  * Un-regularized interval regression (survival package). Learns
-    weights for a given set of features, but may overfit if
-    non-relevant features are used.
-  * Elastic net regularized interval regression (anujkhare/iregnet
-    package on GitHub). Simultaneously learns weights and performs
-    feature selection. Avoids overfitting by setting some feature
-    weights to zero.
+* Un-regularized interval regression (survival package). Learns
+  weights for a given set of features, but may overfit if
+  non-relevant features are used.
+* Elastic net regularized interval regression (anujkhare/iregnet
+  package on GitHub). Simultaneously learns weights and performs
+  feature selection. Avoids overfitting by setting some feature
+  weights to zero.
 
 #### Cross-validation experiments, 20 minutes
 
@@ -169,8 +169,9 @@ required for this tutorial.
 * changepoint.np: non-parametric change-point models.
 * neuroblastoma: labeled data for supervised changepoint detection.
 * Segmentor3IsBack: parametric changepoint models.
-* survival: un-regularized interval regression.
-* iregnet: elastic net regularized interval regression.
+* survival: supervised penalty learning via un-regularized interval regression.
+* iregnet: supervised penalty learning via elastic net regularized
+  interval regression.
 
 ## Expected number of attendees
 
