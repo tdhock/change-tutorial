@@ -2,7 +2,8 @@
 
 ## Instructors
 
-Toby Dylan Hocking (McGill University, Montreal, Canada) toby.hocking@r-project.org
+Toby Dylan Hocking (McGill University, Montreal, Canada) 
+toby.hocking@r-project.org
 
 Rebecca Killick (Lancaster University, UK) r.killick@lancs.ac.uk
 
@@ -25,26 +26,14 @@ theoretical and practical. She has created and contributed to several R packages
 
 ## Brief description of Tutorial
  
-TODO: should we shorten this first paragraph to make this description more "brief"?
-RK: agreed, do you want to take a stab at this as i've written this paragraph so many times already :-)
-
-More data is being collected in the world today than ever before
-resulting in larger and longer data sets. With the length of data sets
-increasing, the statistical properties of the data are likely to
-change over time. Traditional statistical methods often make the
-assumption that the statistical properties do not change over time and
-thus can lead to incorrect inferences when changes are present. A common
-method for relaxing this assumption is to segment the data into
-smaller periods within which the statistical properties do not
-change. One advantage of this technique is that the traditional
-(stationary) methods can be utilized on the individual segments. The
-points in time when the statistical properties change are referred to
-as changepoints.
-
-This course introduces participants to the analysis of changepoint
-models (also known as time series segmentation or structural
-changes). It is highly interactive and uses packages available on CRAN and
-GitHub.
+Changepoint analysis is used to model time series data that has abrupt
+changes in the statistical distribution. The points in time when the
+statistical properties change are referred to as changepoints, and
+there are many algorithms available for computing the optimal
+changepoints for a given data set. This course introduces participants
+to changepoint analysis (also known as time series segmentation or
+structural change detection). It is highly interactive and uses
+packages available on CRAN and GitHub.
 
 Techniques covered in this course include: likelihood and
 nonparametric methods for detecting changes in mean and
@@ -56,20 +45,26 @@ including finance, genomics and the environment.
  
 ## Goals
 
-TODO: update the following with Toby's goals
-
 Following the course participants will be able to:
-* recognize datasets that potentially contain changepoints
-* identify appropriate changepoint methods dependent on the type of change suspected
-* perform changepoint analyses using a variety of techniques in R
-* check assumptions made within a changepoint analysis
-* summarize and evaluate results of a changepoint analysis
+* recognize datasets that potentially contain changepoints.
+* identify appropriate changepoint methods dependent on the type of
+  change suspected.
+* create labels that indicate presence or absence of changepoints, for
+  supervised analysis.
+* perform changepoint analyses using unsupervised and supervised methods.
+* check assumptions made within a changepoint analysis.
+* summarize and evaluate results of a changepoint analysis.
+* compare the accuracy of different changepoint detection methods
+  using cross-validation.
  
 ## Detailed Outline
 
-RK: Any chance of doing a 70/90 split given i'm covering the "what is a changepoint" material too?  I did the last session in 3 hours so trying to cram the same content in less than half the time isn't going to work.
+Note that we will include interactive exercises using
+http://rcloud.social/, each of about 2-5 minutes. These exercises
+will permit students to interactively experiment and learn about
+change-point detection from the R command line.
 
-### Rebecca, 80 minutes
+### Rebecca, 90 minutes
 
 #### What is changepoint analysis and the different types of changepoints? 10 minutes
 
@@ -86,9 +81,7 @@ RK: Any chance of doing a 70/90 split given i'm covering the "what is a changepo
 * In changepoint detection you cannot check assumptions such as Normality prior to analysis as the changes influence any diagnostics you may perform.
 * Demonstation assumption checking using changepoint package and previous class exercises.
 
-
-
-### Toby, Supervised changepoint detection, 80 minutes
+### Toby, Supervised changepoint detection, 70 minutes
 
 #### What is the difference between unsupervised and supervised changepoint detection? 10 minutes
 
@@ -96,43 +89,63 @@ RK: Any chance of doing a 70/90 split given i'm covering the "what is a changepo
   indicate presence and absence of changepoints in particular data
   subsets. These labels can be used for choosing the best model and
   parameters.
-* Plot noisy data, then superimpose labels, without showing
-  predicted changepoints.
-* Demonstration via neuroblastoma data set in CRAN package
-  neuroblastoma. 
+* For a given set of 6 profiles (CRAN package neuroblastoma), plot
+  noisy data, then superimpose labels, without showing predicted
+  changepoints.
+* Exercise: plot data and labels for a different set of profiles.
+* Labels can be created using prior knowledge or visual inspection.
+* Exercise: create a set of labels via visual inspection for one
+  un-labeled segmentation problem in the neuroblastoma data set. Make
+  sure that there is at least one positive and one negative label.
 
-#### Computing the number of incorrect labels, 25 minutes
+#### Computing the number of incorrect labels, 20 minutes
 
-* For a given labeled segmentation problem, compute changepoint models
-  with different penalty parameters.
+* For a given labeled segmentation problem, compute optimal Gaussian
+  changepoint models for 1 to 10 segments (CRAN package
+  Segmentor3IsBack).
 * Compute number of incorrect labels for each model. 
-* Choose the penalty parameter by minimizing the number of incorrect
+* Choose the number of segments by minimizing the number of incorrect
   labels.
 * Compare supervised versus unsupervised changepoint detection: many
   versus one data set, quantitative versus qualitative
   evaluation.
-* Demonstration via CRAN package Segmentor3IsBack.
+* Exercise: perform the same analysis on the segmentation problem that
+  you labeled in the last section. Which models are optimal? (in terms
+  of number of incorrect labels)
 
-#### Supervised penalty learning, 25 minutes
+#### Supervised penalty learning, 20 minutes
 
 * Compute the target interval of penalty values that select changepoint
   models with minimal incorrect labels. 
 * Compute a feature vector for each segmentation problem, and a
   feature matrix for each labeled set of related segmentation
-  problems. 
-* Learn an affine function f(features)=penalty.
-* Demonstration via iregnet package on GitHub.
+  problems.
+* Exercise: to learn the coefficients of the BIC penalty, what feature
+  vector should be used?
+* Learn an affine function f(features)=log(penalty) via either
+  * Un-regularized interval regression (survival package). Learns
+    weights for a given set of features, but may overfit if
+    non-relevant features are used.
+  * Elastic net regularized interval regression (anujkhare/iregnet
+    package on GitHub). Simultaneously learns weights and performs
+    feature selection. Avoids overfitting by setting some feature
+    weights to zero.
 
 #### Cross-validation experiments, 20 minutes
 
 * K-fold cross-validation can be used to compare prediction accuracy
   of supervised and unsupervised changepoint detection.
-* Compute test error and ROC curves for BIC (unsupervised) and learned
-  (supervised) penalty functions.
+* Compute test error and ROC curves for unsupervised and supervised
+  penalty functions: BIC, 1 feature un-regularized, multi-feature
+  un-regularized, multi-feature regularized. Which penalty function is
+  most accurate?
+* Exercise: perform cross-validation to compare Gaussian and Logistic
+  models for log(penalty) values. Which distribution results in more
+  accurate penalty functions?
  
 ## Justification
 
-changepoint detection is a part of time series data analysis which is
+Changepoint detection is a part of time series data analysis which is
 important in fields such as finance, genomics and environment. There
 are many R packages that implement changepoint detection algorithms,
 but each package has a different interface. We will explain the
@@ -147,16 +160,17 @@ to perform changepoint analysis in R.
 * Basic knowledge of R; reading in data, working with vectors and functions. 
 * Basic knowledge of likelihood and hypothesis testing / model choice would be useful.
  
-**Required packages**
+## Required packages
 
-If you want to do exercises using a local copy of R, make sure to
-install these packages before the tutorial:
+We will provide a script that will automatically install all packages
+required for this tutorial.
 
-* changepoint (and dependencies)
-* changepoint.np
-* TODO Toby's packages + R installation script.
-
-TODO http://rcloud.social/ 
+* changepoint: parametric changepoint models.
+* changepoint.np: non-parametric change-point models.
+* neuroblastoma: labeled data for supervised changepoint detection.
+* Segmentor3IsBack: parametric changepoint models.
+* survival: un-regularized interval regression.
+* iregnet: elastic net regularized interval regression.
 
 ## Expected number of attendees
 
