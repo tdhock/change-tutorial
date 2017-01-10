@@ -1,4 +1,4 @@
-## Tutorial title: Change-point detection
+## Tutorial title: Introduction to optimal change-point detection algorithms
 
 ## Instructors
 
