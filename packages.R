@@ -15,3 +15,4 @@ works_with_R("3.3.2",
              "tdhock/animint@c0db9f34c525bec35c797ccdf8be9564b67c578c",
              "tdhock/directlabels@dcf34672129bf99a79ddfaceaef73236ae0f696d",
              "Rdatatable/data.table@7515fbe6c6f60114da72067db44fbe78ecdbd8fb")
+library(survival)
