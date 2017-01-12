@@ -1,4 +1,4 @@
-## Tutorial title: Introduction to optimal change-point detection algorithms
+## Tutorial title: Introduction to optimal changepoint detection algorithms
 
 ## Instructors
 
@@ -11,7 +11,7 @@ Rebecca Killick (Lancaster University, UK) r.killick@lancs.ac.uk
 
 Toby Dylan Hocking is a post-doctoral researcher, working on new
 machine learning models for genomic data. He has implemented several R
-packages for change-point detection (neuroblastoma, bams, PeakSegDP,
+packages for changepoint detection (neuroblastoma, bams, PeakSegDP,
 PeakSegJoint, coseg). He has also implemented several R graphics
 packages, including directlabels (won best student poster at useR2011)
 and animint (presented in a JSM2015 invited session and a useR2016
@@ -32,7 +32,7 @@ statistical properties change are referred to as changepoints, and
 there are many algorithms available for computing the optimal
 changepoints for a given data set. This course introduces participants
 to changepoint analysis (also known as time series segmentation or
-structural change detection). It is highly interactive and uses
+structural change detection) and available optimal algorithms. It is highly interactive and uses
 packages available on CRAN and GitHub.
 
 Techniques covered in this course include: likelihood and
@@ -54,7 +54,7 @@ Following the course participants will be able to:
 * perform changepoint analyses using unsupervised and supervised methods.
 * check assumptions made within a changepoint analysis.
 * summarize and evaluate results of a changepoint analysis.
-* compare the accuracy of different changepoint detection methods
+* compare the accuracy of different labeled changepoint detection methods
   using cross-validation.
  
 ## Detailed Outline
@@ -62,24 +62,34 @@ Following the course participants will be able to:
 Note that we will include interactive exercises using
 http://rcloud.social/, each of about 2-5 minutes. These exercises
 will permit students to interactively experiment and learn about
-change-point detection from the R command line.
+changepoint detection from the R command line.
 
 ### Rebecca, 90 minutes
 
 #### What is changepoint analysis and the different types of changepoints? 10 minutes
 
-#### Methods for detecting changepoints. 55 minutes
+#### Methods for detecting changepoints. 60 minutes
 
 * Single and multiple changepoint detection algorithms
 * Likelihood based approaches
+* Exercise: Use the cpt.mean function to see if there is evidence for a change in
+mean in the Nile river data.  If you identify a change, where is it and what are the pre and post change means?
+* Exercise: Use the cpt.var function to see if there is evidence for changes in
+variance in the FTSE100 data from the changepoint package.  If you identify changes, where are they and what are the variances in each segment?
+* Exercise: Use the cpt.meanvar function to identify regions with different C+G
+content in the HC1 data within the changepoint package.
 * Non parametric approaches
+* Exercise: Look at the HeartRate data from the changepoint.np package. Use one of the non-parametric functions to see if there is evidence for changes in heart rate.
 * Choosing the number of changes
+* Exercise: Look at the FTSE100 data again and use the CROPS technique to
+determine an appropriate number of changes.
 * Demonstration using changepoint and changepoint.np packages
 
-#### Checking assumptions and summarizing results of a changepoint analysis. 15 minutes
+#### Checking assumptions and summarizing results of a changepoint analysis. 20 minutes
 
 * In changepoint detection you cannot check assumptions such as Normality prior to analysis as the changes influence any diagnostics you may perform.
 * Demonstation assumption checking using changepoint package and previous class exercises.
+* Exercise: Check the assumptions you have made on the simulated, Nile, FTSE100 and HeartRate data using either the segment or residual check.
 
 ### Toby, Supervised changepoint detection, 70 minutes
 
@@ -166,7 +176,7 @@ We will provide a script that will automatically install all packages
 required for this tutorial.
 
 * changepoint: parametric changepoint models.
-* changepoint.np: non-parametric change-point models.
+* changepoint.np: non-parametric changepoint models.
 * neuroblastoma: labeled data for supervised changepoint detection.
 * Segmentor3IsBack: parametric changepoint models.
 * survival: supervised penalty learning via un-regularized interval regression.
