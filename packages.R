@@ -1,6 +1,7 @@
 works_with_R("3.3.2",
              neuroblastoma="1.0",
              tikzDevice="0.10.1",
+             cghseg="1.0.2",
              LambertW="0.6.4",
              microbenchmark="1.4.2.1",
              Segmentor3IsBack="2.0",

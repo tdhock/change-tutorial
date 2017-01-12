@@ -40,3 +40,8 @@ fit <- survreg(Surv(min.L, max.L, type="interval2") ~ feature, train.df, dist="g
 ## Error in coxph.wtest(t(x) %*% (wt * x), c((wt * eta + weights * deriv$dg) %*%  : 
 ##   NA/NaN/Inf in foreign function call (arg 3)
 
+intercept.vec <- seq(-3, 1, by=0.1)
+for(pid.chr in rownames(target.mat)){
+  breakpoint.learning$modelSelection$original[[pid.chr]]
+}
+

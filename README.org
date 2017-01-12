@@ -1,6 +1,6 @@
 ** TODOs
 
-Check out coarseDataTools::EMforCFR and adapEnetClass
+Check out coarseDataTools::EMforCFR, adapEnetClass, icenReg
 
 Package for geom_tallrect / widerect.
 
