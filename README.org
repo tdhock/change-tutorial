@@ -1,5 +1,7 @@
 ** TODOs
 
+Check out coarseDataTools::EMforCFR and adapEnetClass
+
 Package for geom_tallrect / widerect.
 
 Package for exactModelSelection and targetInterval.

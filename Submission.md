@@ -1,28 +1,44 @@
-## Tutorial title: Introduction to optimal changepoint detection algorithms
+---
+title: "Introduction to optimal changepoint detection algorithms"
+author: |
+   | Toby Dylan Hocking^1^ and Rebecca Killick^2^
+   |
+   | 1. McGill University, Montreal, Canada
+   | 2. Lancaster University, UK
+institute: 
+   - $^1$McGill University, Montreal, Canada
+   - $^2$Lancaster University, UK
+output: html_document
+---
 
-## Instructors
+**Keywords**: time series, changepoint, segmentation, optimization, machine learning.
 
-Toby Dylan Hocking (McGill University, Montreal, Canada) 
-toby.hocking@r-project.org
+## Goals/Aims/Learning objectives
 
-Rebecca Killick (Lancaster University, UK) r.killick@lancs.ac.uk
+Following the course participants will be able to:
 
-## Short Instructor Biography
+* recognize datasets that potentially contain changepoints.
+* identify appropriate changepoint methods dependent on the type of
+  change suspected.
+* create labels that indicate presence or absence of changepoints, for
+  supervised analysis.
+* perform changepoint analyses using unsupervised and supervised methods.
+* check assumptions made within a changepoint analysis.
+* summarize and evaluate results of a changepoint analysis.
+* compare the accuracy of different labeled changepoint detection methods
+  using cross-validation.
+ 
+## Justification
 
-Toby Dylan Hocking is a post-doctoral researcher, working on new
-machine learning models for genomic data. He has implemented several R
-packages for changepoint detection (neuroblastoma, bams, PeakSegDP,
-PeakSegJoint, coseg). He has also implemented several R graphics
-packages, including directlabels (won best student poster at useR2011)
-and animint (presented in a JSM2015 invited session and a useR2016
-tutorial).
-
-Rebecca Killick is a Lecturer in Statistics at the University of
-Lancaster. Her research is in developing methodology for the analysis
-of nonstationary time series to address real world problems.  She has
-taught a range of courses over the last 10 years from first year
-undergraduate introductory courses to PhD level courses both
-theoretical and practical. She has created and contributed to several R packages on changepoint detection including changepoint, changepoint.np, EnvCpt and delivered a workshop on changepoint detection at eRum2016. Her code has been adapted for delivery in commercial software and is available as part of the NAG libraries.
+Changepoint detection is a part of time series data analysis which is
+important in fields such as finance, genomics and environment. There
+are many R packages that implement changepoint detection algorithms,
+but each package has a different interface. We will explain the
+differences between these packages, and show examples using several
+real data sets. We will emphasize coding exercises, so that
+participants can get familiar with using these packages. This tutorial
+will be ideal for useRs with time series data that do not yet know how
+to perform changepoint analysis in R.
 
 ## Brief description of Tutorial
  
@@ -43,28 +59,14 @@ theoretically and there will be break outs where participants will use
 the techniques on real data sets from a variety of application areas
 including finance, genomics and the environment.
  
-## Goals
-
-Following the course participants will be able to:
-* recognize datasets that potentially contain changepoints.
-* identify appropriate changepoint methods dependent on the type of
-  change suspected.
-* create labels that indicate presence or absence of changepoints, for
-  supervised analysis.
-* perform changepoint analyses using unsupervised and supervised methods.
-* check assumptions made within a changepoint analysis.
-* summarize and evaluate results of a changepoint analysis.
-* compare the accuracy of different labeled changepoint detection methods
-  using cross-validation.
- 
-## Detailed Outline
+## Detailed outline of tutorial content
 
 Note that we will include interactive exercises using
 http://rcloud.social/, each of about 2-5 minutes. These exercises
 will permit students to interactively experiment and learn about
 changepoint detection from the R command line.
 
-### Rebecca, 90 minutes
+### Rebecca, Unsupervised changepoint detection, 90 minutes
 
 #### What is changepoint analysis and the different types of changepoints? 10 minutes
 
@@ -130,7 +132,7 @@ determine an appropriate number of changes.
 * Compute a feature vector for each segmentation problem, and a
   feature matrix for each labeled set of related segmentation
   problems.
-* Learn an affine function f(features)=log(penalty).
+* Learn an affine function f(feature vector)=log(penalty).
 * Exercise: to learn the coefficients of the BIC penalty, what feature
   vector should be used?
 * Un-regularized interval regression (survival package). Learns
@@ -153,27 +155,13 @@ determine an appropriate number of changes.
   models for log(penalty) values. Which distribution results in more
   accurate penalty functions?
  
-## Justification
-
-Changepoint detection is a part of time series data analysis which is
-important in fields such as finance, genomics and environment. There
-are many R packages that implement changepoint detection algorithms,
-but each package has a different interface. We will explain the
-differences between these packages, and show examples using several
-real data sets. We will emphasize coding exercises, so that
-participants can get familiar with using these packages. This tutorial
-will be ideal for useRs with time series data that do not yet know how
-to perform changepoint analysis in R.
-
-## Background knowledge
+## Pre-requisite background knowledge and packages
 
 * Basic knowledge of R; reading in data, working with vectors and functions. 
 * Basic knowledge of likelihood and hypothesis testing / model choice would be useful.
  
-## Required packages
-
 We will provide a script that will automatically install all packages
-required for this tutorial.
+required for this tutorial:
 
 * changepoint: parametric changepoint models.
 * changepoint.np: non-parametric changepoint models.
@@ -183,8 +171,34 @@ required for this tutorial.
 * iregnet: supervised penalty learning via elastic net regularized
   interval regression.
 
-## Expected number of attendees
+## Potential attendees
 
-Time series data are rather common, so changepoint detection should be
-a rather popular topic. We expect an audience of about 50 people,
-so please reserve a large classroom or small lecture hall.
+Time series data are rather common in many fields (finance, genomics, 
+environment), so changepoint detection should be a rather popular
+topic. We expect an audience of about 50 people, so please reserve a
+large classroom or small lecture hall.
+
+## Instructor Biographies
+
+Toby Dylan Hocking (McGill University, Montreal, Canada;
+toby.hocking@r-project.org, https://github.com/tdhock) is a
+post-doctoral researcher, working on new machine learning models for
+genomic data. He has implemented several R packages for changepoint
+detection (neuroblastoma, bams, PeakSegDP, PeakSegJoint, coseg). He
+has also implemented several R graphics packages, including
+directlabels (won best student poster at useR2011) and animint
+(presented in a JSM2015 invited session and a useR2016 tutorial).
+
+Rebecca Killick (Lancaster University, UK; r.killick@lancs.ac.uk,
+http://www.lancs.ac.uk/~killick) is a Lecturer in Statistics at the
+University of Lancaster. Her research is in developing methodology for
+the analysis of nonstationary time series to address real world
+problems.  She has taught a range of courses over the last 10 years
+from first year undergraduate introductory courses to PhD level
+courses both theoretical and practical. She has created and
+contributed to several R packages on changepoint detection including
+changepoint, changepoint.np, EnvCpt and delivered a workshop on
+changepoint detection at eRum2016. Her code has been adapted for
+delivery in commercial software and is available as part of the NAG
+libraries.
+
