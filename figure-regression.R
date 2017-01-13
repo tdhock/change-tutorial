@@ -24,12 +24,22 @@ BIC.df <- data.frame(slope=1, intercept=0, model="BIC")
 train.df <- data.frame(
   feature=all.features.mat[, "log2.n"],
   target.mat)
+train.df$pred.log.penalty <- train.df$feature #for the BIC
+train.df$model <- "BIC"
 
 gg <- ggplot()+
+  geom_segment(aes(
+    feature, pred.log.penalty, xend=feature, color=model,
+    yend=ifelse(feature < min.L, min.L, NA)),
+               data=train.df)+
+  geom_segment(aes(
+    feature, pred.log.penalty, xend=feature, color=model,
+    yend=ifelse(max.L < pred.log.penalty, max.L, NA)),
+               data=train.df)+
+  geom_abline(aes(slope=slope, intercept=intercept, color=model), data=BIC.df, size=1)+
   geom_point(aes(feature, ifelse(is.finite(min.L), min.L, NA), fill="min"), data=train.df, shape=21)+
   geom_point(aes(feature, ifelse(is.finite(max.L), max.L, NA), fill="max"), data=train.df, shape=21)+
   scale_fill_manual("limit", values=c(min="black", max="white"))+
-  geom_abline(aes(slope=slope, intercept=intercept, color=model), data=BIC.df, size=2)+
   scale_color_manual(values=c(BIC="red", learned="deepskyblue"))+
   scale_x_continuous("feature = log(log(n = number of data points to segment))")+
   scale_y_continuous("<-- more changes     log(penalty)     less changes -->")
