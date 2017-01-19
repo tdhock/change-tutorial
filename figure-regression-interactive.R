@@ -1,0 +1,394 @@
+source("packages.R")
+
+load("breakpoint.learning.RData")
+## TODO: do this using Segmentor. data!
+target.mat <- breakpoint.learning$targets$original
+all.features.mat <- breakpoint.learning$features[rownames(target.mat), ]
+
+train.dt <- data.table(
+  profile.id=sub("[.].*", "", rownames(all.features.mat)),
+  chromosome=sub(".*[.]", "", rownames(all.features.mat)),
+  feature=all.features.mat[, "log2.n"],
+  target.mat)
+
+## The log2.n feature is log(log(n = number of data points to segment)).
+
+## The model selection criterion is argmin_K totalSquareLoss_K +
+## lambda * K where K is the number of segments in the piecewise
+## constant model, and lambda is a non-negative penalty constant.
+
+## The target.mat contains the interval of log(lambda) values for
+## which the number of incorrect labels is minimized.
+
+## The BIC model selection criterion is lambda = log(n), where n is
+## the number of data points to segment. This implies log(lambda) =
+## log(log(n)) = the log2.n feature in all.features.mat.
+
+## We can thus visualize the BIC penalty as a line with slope 1 and
+## intercept 0 in a plot of log(lambda) versus log(log(n)).
+BIC.df <- data.frame(slope=1, intercept=0, model.name="BIC")
+train.dt[, pred.log.lambda := feature ] #for the BIC
+train.dt$model.name <- "BIC"
+train.dt[, residual := targetIntervalResidual(cbind(min.L, max.L), pred.log.lambda)]
+
+possible <- train.dt[, list(
+  negative=sum(-Inf < min.L),
+  positive=sum(max.L < Inf)
+  )]
+
+total.BIC <- train.dt[, list(
+  total.residual=sum(residual),
+  intervals=.N
+  ), by=.(model.name, sign.residual=sign(residual))]
+total.BIC
+
+gg <- ggplot()+
+  geom_text(aes(
+    1.4, 6, color=model.name,
+    label=sprintf(
+      "total too high = %.1f (%d intervals / %d possible)",
+      total.residual, intervals, possible$negative)),
+            data=total.BIC[sign.residual==1, ],
+            hjust=0)+
+  geom_text(aes(
+    1.4, 5.5, color=model.name,
+    label=sprintf("%d intervals correctly predicted", intervals)),
+            data=total.BIC[sign.residual==0, ],
+            hjust=0)+
+  geom_text(aes(
+    1.4, 5, color=model.name,
+    label=sprintf(
+      "total too low = %.1f (%d intervals / %d possible)",
+      total.residual, intervals, possible$positive)),
+            data=total.BIC[sign.residual==-1, ],
+            hjust=0)+
+  geom_segment(aes(
+    feature, pred.log.lambda, xend=feature, color=model.name,
+    yend=ifelse(residual==0, NA, pred.log.lambda-residual)),
+               size=1,
+               linetype="dotted",
+               data=train.dt)+
+  geom_abline(aes(slope=slope, intercept=intercept, color=model.name), data=BIC.df, size=1)+
+  geom_point(aes(feature, ifelse(is.finite(min.L), min.L, NA), fill="min"), data=train.dt, shape=21)+
+  geom_point(aes(feature, ifelse(is.finite(max.L), max.L, NA), fill="max"), data=train.dt, shape=21)+
+  scale_fill_manual("limit", values=c(min="black", max="white"))+
+  scale_color_manual(values=c(BIC="red", learned="deepskyblue"))+
+  scale_x_continuous("feature = log(log(n = number of data points to segment))")+
+  scale_y_continuous("<-- more changes     log(penalty)     less changes -->")
+print(gg)
+
+
+gg <- ggplot()+
+  geom_text(aes(
+    1.4, 6, color=model.name,
+    label=sprintf(
+      "total too high = %.1f (%d intervals / %d possible)",
+      total.residual, intervals, possible$negative)),
+            data=total.BIC[sign.residual==1, ],
+            hjust=0)+
+  geom_text(aes(
+    1.4, 5.5, color=model.name,
+    label=sprintf("%d intervals correctly predicted", intervals)),
+            data=total.BIC[sign.residual==0, ],
+            hjust=0)+
+  geom_text(aes(
+    1.4, 5, color=model.name,
+    label=sprintf(
+      "total too low = %.1f (%d intervals / %d possible)",
+      total.residual, intervals, possible$positive)),
+            data=total.BIC[sign.residual==-1, ],
+            hjust=0)+
+  geom_segment(aes(
+    feature, pred.log.lambda, xend=feature, color=model.name,
+    yend=ifelse(residual==0, NA, pred.log.lambda-residual)),
+               size=1,
+               linetype="dotted",
+               data=train.dt)+
+  geom_abline(aes(slope=slope, intercept=intercept, color=model.name), data=BIC.df, size=1)+
+  geom_point(aes(feature, ifelse(is.finite(min.L), min.L, NA), fill="min"), data=train.dt, shape=21)+
+  geom_point(aes(feature, ifelse(is.finite(max.L), max.L, NA), fill="max"), data=train.dt, shape=21)+
+  scale_fill_manual("limit", values=c(min="black", max="white"))+
+  scale_color_manual(values=c(BIC="red", learned="deepskyblue"))+
+  scale_x_continuous("feature = log(log(n = number of data points to segment))")+
+  scale_y_continuous("<-- more changes     log(penalty)     less changes -->")
+print(gg)
+
+## Bug?
+## fit <- survreg(Surv(min.L, max.L, type="interval2") ~ feature, train.dt, dist="gaussian")
+## Error in coxph.wtest(t(x) %*% (wt * x), c((wt * eta + weights * deriv$dg) %*%  : 
+##   NA/NaN/Inf in foreign function call (arg 3)
+
+fit <- with(train.dt, {
+  IntervalRegressionUnregularized(
+    cbind(feature), cbind(min.L, max.L))
+})
+pred.dt <- data.table(train.dt)
+pred.dt[, pred.log.lambda := fit$predict(cbind(feature))]
+pred.dt[, residual := targetIntervalResidual(cbind(min.L, max.L), pred.log.lambda)]
+pred.dt$model.name <- "learned"
+total.learned <- pred.dt[, list(
+  total.residual=sum(residual),
+  intervals=.N
+  ), by=.(model.name, sign.residual=sign(residual))]
+total.learned
+
+learned.slope <- with(fit, param.mat["feature",]/sd.vec)
+learned.intercept <- fit$param.mat["(Intercept)",]-ratio*fit$mean.vec
+gg+
+  geom_text(aes(
+    1.8, -4, color=model.name,
+    label=sprintf(
+      "total too high = %.1f (%d intervals / %d possible)",
+      total.residual, intervals, possible$negative)),
+            data=total.learned[sign.residual==1, ],
+            hjust=0)+
+  geom_text(aes(
+    1.8, -4.5, color=model.name,
+    label=sprintf("%d intervals correctly predicted", intervals)),
+            data=total.learned[sign.residual==0, ],
+            hjust=0)+
+  geom_text(aes(
+    1.8, -5, color=model.name,
+    label=sprintf(
+      "total too low = %.1f (%d intervals / %d possible)",
+      total.residual, intervals, possible$positive)),
+            data=total.learned[sign.residual==-1, ],
+            hjust=0)+
+  geom_segment(aes(
+    feature, pred.log.lambda, xend=feature, color=model.name,
+    yend=ifelse(residual==0, NA, pred.log.lambda-residual)),
+               linetype="solid",
+               data=pred.dt)+
+  geom_abline(
+    aes(
+      slope=learned.slope,
+      intercept=learned.intercept
+      )
+  )+
+  geom_line(aes(
+    feature, pred.log.lambda, color=model.name), data=pred.dt)
+
+## TODO: linked regression
+load("Segmentor.models.RData")
+data(neuroblastoma, package="neuroblastoma")
+selection <- Segmentor.models$loss[, modelSelection(
+  .SD, complexity="n.segments"
+  ), by=.(profile.id, chromosome)]
+changes <- Segmentor.models$segs[1 < start, ]
+errors <- labelError(
+  selection, neuroblastoma$annotations, changes,
+  change.var="chromStart",
+  label.vars=c("min", "max"),
+  model.vars="n.segments",
+  problem.vars=c("profile.id", "chromosome"))
+
+model.list <- list(
+  BIC=train.dt,
+  learned=pred.dt)
+roc.list <- list()
+auc.list <- list()
+pred.dot.list <- list()
+auc.polygon.list <- list()
+for(model.name in names(model.list)){
+  model.dt <- model.list[[model.name]]
+  feature.result <- ROChange(errors$model.errors, model.dt, c("profile.id", "chromosome"))
+  pred.dot.list[[model.name]] <- data.table(model.name, feature.result$thresholds)
+  roc.list[[model.name]] <- data.table(model.name, feature.result$roc)
+  auc.list[[model.name]] <- data.table(model.name, auc=feature.result$auc)
+  auc.polygon.list[[model.name]] <- data.table(model.name, feature.result$auc.polygon)
+}
+roc <- do.call(rbind, roc.list)
+auc <- do.call(rbind, auc.list)
+pred.dot <- do.call(rbind, pred.dot.list)
+auc.polygon <- do.call(rbind, auc.polygon.list)
+
+roc[, mid.thresh := (min.thresh+max.thresh)/2]
+pred.dot[, mid.thresh := (min.thresh+max.thresh)/2]
+roc[, threshold := "other"]
+some.thresh <- unique(rbind(
+  roc[is.finite(mid.thresh), .SD[as.integer(seq(1, .N, l=50)[c(1,5,10,15,20, 25, 30:50)]), ], by=model.name][, names(pred.dot), with=FALSE],
+  pred.dot))
+setkey(some.thresh, model.name, mid.thresh)
+some.thresh[, prev.thresh := c(mid.thresh[1], mid.thresh[-.N])]
+some.thresh[, next.thresh := c(mid.thresh[-1], mid.thresh[.N])]
+some.thresh[, slope := ifelse(model.name=="BIC", 1, learned.slope)]
+some.thresh[, intercept := ifelse(model.name=="BIC", 0, learned.intercept)+mid.thresh]
+
+both.pred <- rbind(train.dt, pred.dt)
+setkey(both.pred, model.name)
+setkey(some.thresh, model.name)
+some.thresh.pred <- both.pred[some.thresh, allow.cartesian=TRUE]
+some.thresh.pred[, pred.log.lambda := slope * feature + intercept]
+some.thresh.pred[, residual := targetIntervalResidual(cbind(min.L, max.L), pred.log.lambda)]
+total.thresh.pred <- some.thresh.pred[, list(
+  total.residual=sum(residual),
+  intervals=.N
+  ), by=.(model.name, sign.residual=sign(residual), mid.thresh)]
+total.thresh.pred
+residual.thresh.pred <- some.thresh.pred[residual!=0,]
+
+auc$TPR <- c(0.85, 0.9)
+auc$FPR <- 0.2
+bic.left <- 1.45
+bic.top <- 6.5
+bic.space <- 0.7
+learned.left <- 1.8
+learned.top <- -4
+bic.thresh.colors <- c(predicted="grey", min.error="black", other="white")
+viz <- list(
+  title="BIC versus learned penalty in neuroblastoma data",
+  thresholds=ggplot()+
+    theme_bw()+
+    guides(fill="none", color="none")+
+    geom_line(aes(mid.thresh, errors, group=model.name, color=model.name,
+                  showSelected=model.name), data=some.thresh)+
+    geom_tallrect(aes(xmin=prev.thresh, xmax=next.thresh,
+                      clickSelects.variable=paste0(model.name, ".thresh"),
+                      clickSelects.value=mid.thresh,
+                      color=model.name,
+                      showSelected=model.name),
+                  size=3,
+                  alpha=0.5,
+                  data=some.thresh)+
+    ylab("total incorrect labels")+
+    xlab("constant/threshold added to log(penalty)")+
+    ## geom_segment(aes(min.thresh, errors, xend=max.thresh, yend=errors, color=model.name),
+    ##              data=roc)+
+    scale_fill_manual(values=c(predicted="grey", min.error="black"))+
+    scale_color_manual(values=c(BIC="red", learned="deepskyblue"))+
+    geom_point(aes((max.thresh+min.thresh)/2, errors,
+                   clickSelects.variable=paste0(model.name, ".thresh"),
+                   clickSelects.value=mid.thresh,
+                   color=model.name,
+                   showSelected=model.name,
+                   fill=threshold),
+               data=pred.dot,
+               size=4,
+               shape=21),
+  roc=ggplot()+
+    theme_bw()+
+    geom_text(aes(FPR, TPR, color=model.name, label=sprintf("AUC = %.4f", auc)),
+              hjust=0,
+              data=auc)+
+    geom_path(aes(FPR, TPR, color=model.name, group=model.name),
+              size=2,
+              data=roc)+
+    scale_fill_manual(values=thresh.colors, breaks=names(thresh.colors))+
+    scale_color_manual(values=c(BIC="red", learned="deepskyblue"))+
+    geom_point(aes(FPR, TPR,
+                   showSelected.variable=paste0(model.name, ".thresh"),
+                   showSelected.value=mid.thresh,
+                   showSelected2=threshold,
+                   showSelected=model.name),
+               data=some.thresh,
+               color="grey",
+               size=6,
+               shape=21)+
+    geom_point(aes(FPR, TPR,
+                   clickSelects.variable=paste0(model.name, ".thresh"),
+                   clickSelects.value=mid.thresh,
+                   color=model.name, fill=threshold),
+               data=some.thresh,
+               size=4,
+               alpha=0.7,
+               shape=21)+
+    coord_equal(),
+  regression=ggplot()+
+    theme_bw()+
+    theme_animint(width=800)+
+    geom_text(aes(
+      bic.left, bic.top, color=model.name,
+      showSelected.variable=paste0(model.name, ".thresh"),
+      showSelected.value=mid.thresh,
+      label=sprintf(
+        "total too high = %.1f (%d intervals / %d possible)",
+        total.residual, intervals, possible$negative)),
+              data=total.thresh.pred[sign.residual==1 & model.name=="BIC", ],
+              hjust=0)+
+    geom_text(aes(
+      bic.left, bic.top-bic.space, color=model.name,
+      showSelected.variable=paste0(model.name, ".thresh"),
+      showSelected.value=mid.thresh,
+      label=sprintf("%d intervals correctly predicted", intervals)),
+              data=total.thresh.pred[sign.residual==0 & model.name=="BIC", ],
+              hjust=0)+
+    geom_text(aes(
+      bic.left, bic.top-bic.space*2, color=model.name,
+      showSelected.variable=paste0(model.name, ".thresh"),
+      showSelected.value=mid.thresh,
+      label=sprintf(
+        "total too low = %.1f (%d intervals / %d possible)",
+        total.residual, intervals, possible$positive)),
+              data=total.thresh.pred[sign.residual==-1 & model.name=="BIC", ],
+              hjust=0)+
+    geom_text(aes(
+      learned.left, learned.top, color=model.name,
+      showSelected.variable=paste0(model.name, ".thresh"),
+      showSelected.value=mid.thresh,
+      label=sprintf(
+        "total too high = %.1f (%d intervals / %d possible)",
+        total.residual, intervals, possible$negative)),
+              data=total.thresh.pred[sign.residual==1 & model.name=="learned", ],
+              hjust=0)+
+    geom_text(aes(
+      learned.left, learned.top-bic.space, color=model.name,
+      showSelected.variable=paste0(model.name, ".thresh"),
+      showSelected.value=mid.thresh,
+      label=sprintf("%d intervals correctly predicted", intervals)),
+              data=total.thresh.pred[sign.residual==0 & model.name=="learned", ],
+              hjust=0)+
+    geom_text(aes(
+      learned.left, learned.top-bic.space*2, color=model.name,
+      showSelected.variable=paste0(model.name, ".thresh"),
+      showSelected.value=mid.thresh,
+      label=sprintf(
+        "total too low = %.1f (%d intervals / %d possible)",
+        total.residual, intervals, possible$positive)),
+              data=total.thresh.pred[sign.residual==-1 & model.name=="learned", ],
+              hjust=0)+
+    geom_point(aes(feature, min.L, fill=limit),
+               data=data.table(limit="min", train.dt[is.finite(min.L),]),
+               shape=21)+
+    geom_point(aes(feature, max.L, fill=limit),
+               data=data.table(limit="max", train.dt[is.finite(max.L),]),
+               shape=21)+
+    geom_abline(aes(slope=slope,
+                    showSelected.variable=paste0(model.name, ".thresh"),
+                    showSelected.value=mid.thresh,
+                    intercept=intercept, color=model.name),
+                data=some.thresh)+
+    geom_segment(aes(
+      feature, pred.log.lambda, xend=feature, color=model.name,
+      showSelected.variable=paste0(model.name, ".thresh"),
+      showSelected.value=mid.thresh,
+      yend=pred.log.lambda-residual),
+                 size=1,
+                 data=residual.thresh.pred)+
+    scale_fill_manual(values=c(min="black", max="white"))+
+    scale_color_manual(values=c(BIC="red", learned="deepskyblue"))+
+    scale_x_continuous("feature = log(log(n = number of data points to segment))")+
+    scale_y_continuous("<-- more changes     log(penalty)     less changes -->"),
+  first=list())
+pred.thresh.only <- some.thresh[threshold=="predicted",]
+for(row.i in 1:nrow(pred.thresh.only)){
+  r <- pred.thresh.only[row.i, ]
+  viz$first[[paste0(r$model.name, ".thresh")]] <- r$mid.thresh
+}
+animint2dir(viz, "figure-regression-interactive")
+
+
+ggplot()+
+  theme_bw()+
+  geom_text(aes(FPR, TPR, color=model.name, label=sprintf("AUC = %.4f", auc)),
+            vjust=0,
+            data=auc)+
+  geom_path(aes(FPR, TPR, color=model.name, group=model.name),
+            data=roc)+
+  scale_fill_manual(values=c(default="grey", min.error="black"))+
+  geom_point(aes(FPR, TPR, color=model.name, fill=threshold),
+             data=pred.dot,
+             size=3,
+             shape=21)+
+  coord_equal()+
+  xlim(0, 0.25)+ylim(0.75, 1)
+
