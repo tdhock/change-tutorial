@@ -1,9 +1,26 @@
 source("packages.R")
 
 load("breakpoint.learning.RData")
-## TODO: do this using Segmentor. data!
+load("Segmentor.models.RData")
 target.mat <- breakpoint.learning$targets$original
 all.features.mat <- breakpoint.learning$features[rownames(target.mat), ]
+
+data(neuroblastoma, package="neuroblastoma")
+selection <- Segmentor.models$loss[, modelSelection(
+  .SD, complexity="n.segments"
+  ), by=.(profile.id, chromosome)]
+changes <- Segmentor.models$segs[1 < start, ]
+errors <- labelError(
+  selection, neuroblastoma$annotations, changes,
+  change.var="chromStart",
+  label.vars=c("min", "max"),
+  model.vars="n.segments",
+  problem.vars=c("profile.id", "chromosome"))
+neuroblastomaProcessed <- list(
+  feature.mat=all.features.mat,
+  target.mat=target.mat,
+  errors=errors$model.errors)
+##save(neuroblastomaProcessed, file="~/R/penaltyLearning/data/neuroblastomaProcessed.RData", compress="xz")
 
 train.dt <- data.table(
   profile.id=sub("[.].*", "", rownames(all.features.mat)),
@@ -133,7 +150,7 @@ total.learned <- pred.dt[, list(
 total.learned
 
 learned.slope <- with(fit, param.mat["feature",]/sd.vec)
-learned.intercept <- fit$param.mat["(Intercept)",]-ratio*fit$mean.vec
+learned.intercept <- fit$param.mat["(Intercept)",]-learned.slope*fit$mean.vec
 gg+
   geom_text(aes(
     1.8, -4, color=model.name,
@@ -169,18 +186,6 @@ gg+
     feature, pred.log.lambda, color=model.name), data=pred.dt)
 
 ## TODO: linked regression
-load("Segmentor.models.RData")
-data(neuroblastoma, package="neuroblastoma")
-selection <- Segmentor.models$loss[, modelSelection(
-  .SD, complexity="n.segments"
-  ), by=.(profile.id, chromosome)]
-changes <- Segmentor.models$segs[1 < start, ]
-errors <- labelError(
-  selection, neuroblastoma$annotations, changes,
-  change.var="chromStart",
-  label.vars=c("min", "max"),
-  model.vars="n.segments",
-  problem.vars=c("profile.id", "chromosome"))
 
 model.list <- list(
   BIC=train.dt,
@@ -234,7 +239,7 @@ bic.top <- 6.5
 bic.space <- 0.7
 learned.left <- 1.8
 learned.top <- -4
-bic.thresh.colors <- c(predicted="grey", min.error="black", other="white")
+thresh.colors <- c(predicted="grey", min.error="black", other="white")
 viz <- list(
   title="BIC versus learned penalty in neuroblastoma data",
   thresholds=ggplot()+
@@ -261,6 +266,7 @@ viz <- list(
                    clickSelects.value=mid.thresh,
                    color=model.name,
                    showSelected=model.name,
+                   showSelected2=threshold,
                    fill=threshold),
                data=pred.dot,
                size=4,
