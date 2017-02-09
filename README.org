@@ -13,7 +13,8 @@ process.
 ** 9 Feb 2017
 
 [[file:figure-regression-interactive-some.R]] for interactive figure with
-a few profiles that we can zoom in to.
+a few profiles that we can zoom in
+to. http://bl.ocks.org/tdhock/raw/9fc37a7aaf291cef364aab3fb41dd898/
 
 [[file:figure-regression-interactive.R]] for comparing BIC and learned
 model on entire neuroblastoma data set.

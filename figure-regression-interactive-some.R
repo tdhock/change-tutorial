@@ -302,11 +302,6 @@ for(row.i in 1:nrow(pred.thresh.only)){
 }
 animint2dir(viz, "figure-regression-interactive-some")
 
-## TODO: facet_grid in regression plot, with second panel showing
-## learned model in log(n) space. or maybe a single panel with
-## showSelected=model, key=profile (dots, regression line,
-## residuals/margin move to new positions when model changes).
-
 ## TODO: plot data with showSelected=profile, model and labels/errors
 ## with showSelected=model.
 
