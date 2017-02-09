@@ -210,14 +210,40 @@ auc.polygon <- do.call(rbind, auc.polygon.list)
 roc[, mid.thresh := (min.thresh+max.thresh)/2]
 pred.dot[, mid.thresh := (min.thresh+max.thresh)/2]
 roc[, threshold := "other"]
+## We would like to sample some thresholds evenly in the ROC space, so
+## here we compute dist.from.zero, which is the cumulative euclidean
+## distance from (0,0) in the ROC space.
+roc[, dist.from.zero := cumsum(sqrt({
+  diff(c(0, FPR))^2 + diff(c(0, TPR))^2
+})), by=model.name]
+grid.thresh <- roc[is.finite(mid.thresh), {
+  .SD[as.integer(seq(1, .N, l=50)[c(1,5,10,15,20, 25, 30:50)]), ]
+}, by=model.name]
+grid.thresh <- roc[is.finite(mid.thresh), {
+  r <- range(dist.from.zero)
+  d.vec <- seq(r[1], r[2], l=50)
+  i.vec <- sapply(d.vec, function(d)which.min(abs(dist.from.zero-d)))
+  .SD[i.vec,]
+}, by=model.name]
 some.thresh <- unique(rbind(
-  roc[is.finite(mid.thresh), .SD[as.integer(seq(1, .N, l=50)[c(1,5,10,15,20, 25, 30:50)]), ], by=model.name][, names(pred.dot), with=FALSE],
+  grid.thresh[, names(pred.dot), with=FALSE],
   pred.dot))
 setkey(some.thresh, model.name, mid.thresh)
-some.thresh[, prev.thresh := c(mid.thresh[1], mid.thresh[-.N])]
-some.thresh[, next.thresh := c(mid.thresh[-1], mid.thresh[.N])]
+some.thresh[, prev.thresh := {
+  d <- diff(mid.thresh)/2
+  c(mid.thresh[1]-d[1], mid.thresh[-.N]+d)
+  }, by=model.name]
+some.thresh[, next.thresh := {
+  d <- diff(mid.thresh)/2
+  c(mid.thresh[-.N]+d, mid.thresh[.N]+d[.N-1])
+}, by=model.name]
+some.thresh[, stopifnot(
+  identical(prev.thresh[-1], next.thresh[-.N])
+  ), by=model.name]
 some.thresh[, slope := ifelse(model.name=="BIC", 1, learned.slope)]
-some.thresh[, intercept := ifelse(model.name=="BIC", 0, learned.intercept)+mid.thresh]
+some.thresh[, intercept := {
+  ifelse(model.name=="BIC", 0, learned.intercept)+mid.thresh
+}]
 
 both.pred <- rbind(train.dt, pred.dt)
 setkey(both.pred, model.name)
@@ -257,8 +283,6 @@ viz <- list(
                   data=some.thresh)+
     ylab("total incorrect labels")+
     xlab("constant/threshold added to log(penalty)")+
-    ## geom_segment(aes(min.thresh, errors, xend=max.thresh, yend=errors, color=model.name),
-    ##              data=roc)+
     scale_fill_manual(values=c(predicted="grey", min.error="black"))+
     scale_color_manual(values=c(BIC="red", learned="deepskyblue"))+
     geom_point(aes((max.thresh+min.thresh)/2, errors,
@@ -395,6 +419,35 @@ ggplot()+
              data=pred.dot,
              size=3,
              shape=21)+
-  coord_equal()+
-  xlim(0, 0.25)+ylim(0.75, 1)
+  coord_equal(xlim=c(0, 0.25), ylim=c(0.75, 1))
+
+ggplot()+
+  theme_bw()+
+  geom_text(aes(FPR, TPR, color=model.name, label=sprintf("AUC = %.4f", auc)),
+            vjust=0,
+            data=auc)+
+  geom_path(aes(FPR, TPR, color=model.name, group=model.name),
+            data=roc)+
+  scale_fill_manual(values=c(default="grey", min.error="black"))+
+  geom_point(aes(FPR, TPR, color=model.name, fill=threshold),
+             data=pred.dot,
+             size=3,
+             shape=21)+
+  coord_equal(xlim=c(0, 0.25), ylim=c(0.75, 1))
+
+ggplot()+
+  theme_bw()+
+  geom_text(aes(FPR, TPR, label=sprintf("AUC = %.4f", auc)),
+            vjust=0,
+            data=auc)+
+  geom_path(aes(FPR, TPR, 
+                color=dist.from.zero, group=model.name),
+            data=roc)+
+  scale_fill_manual(values=c(default="grey", min.error="black"))+
+  geom_point(aes(FPR, TPR, fill=threshold),
+             data=pred.dot,
+             size=3,
+             shape=21)+
+  scale_color_gradient(low="black", high="red")
+
 

@@ -10,6 +10,20 @@ train.dt <- data.table(
   chromosome=sub(".*[.]", "", rownames(all.features.mat)),
   feature=all.features.mat[, "log2.n"],
   target.mat)
+BIC.df <- data.frame(slope=1, intercept=0, model="BIC")
+train.dt[, pred.log.lambda := feature ] #for the BIC
+train.dt$model <- "BIC"
+train.dt[, residual := targetIntervalResidual(cbind(min.L, max.L), pred.log.lambda)]
+total.BIC <- train.dt[, list(
+  total.residual=sum(residual),
+  intervals=.N
+  ), by=.(model, sign.residual=sign(residual))]
+total.BIC
+possible <- train.dt[, list(
+  negative=sum(-Inf < min.L),
+  positive=sum(max.L < Inf)
+  )]
+
 gg <- ggplot()+
   geom_text(aes(
     1.4, 6, color=model,
@@ -60,21 +74,6 @@ print(gg)
 
 ## We can thus visualize the BIC penalty as a line with slope 1 and
 ## intercept 0 in a plot of log(lambda) versus log(log(n)).
-BIC.df <- data.frame(slope=1, intercept=0, model="BIC")
-train.dt[, pred.log.lambda := feature ] #for the BIC
-train.dt$model <- "BIC"
-train.dt[, residual := targetIntervalResidual(cbind(min.L, max.L), pred.log.lambda)]
-
-possible <- train.dt[, list(
-  negative=sum(-Inf < min.L),
-  positive=sum(max.L < Inf)
-  )]
-
-total.BIC <- train.dt[, list(
-  total.residual=sum(residual),
-  intervals=.N
-  ), by=.(model, sign.residual=sign(residual))]
-total.BIC
 
 gg <- ggplot()+
   geom_text(aes(
