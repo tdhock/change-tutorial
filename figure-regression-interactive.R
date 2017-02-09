@@ -49,8 +49,8 @@ train.dt$model.name <- "BIC"
 train.dt[, residual := targetIntervalResidual(cbind(min.L, max.L), pred.log.lambda)]
 
 possible <- train.dt[, list(
-  negative=sum(-Inf < min.L),
-  positive=sum(max.L < Inf)
+  positive=sum(-Inf < min.L),
+  negative=sum(max.L < Inf)
   )]
 
 total.BIC <- train.dt[, list(

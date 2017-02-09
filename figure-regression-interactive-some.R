@@ -20,157 +20,91 @@ errors <- labelError(
   label.vars=c("min", "max"),
   model.vars="n.segments",
   problem.vars=c("profile.id", "chromosome"))
-neuroblastomaProcessed <- list(
-  feature.mat=all.features.mat,
-  target.mat=target.mat,
-  errors=errors$model.errors)
-##save(neuroblastomaProcessed, file="~/R/penaltyLearning/data/neuroblastomaProcessed.RData", compress="xz")
 
-train.dt <- data.table(
-  profile.id=sub("[.].*", "", rownames(all.features.mat)),
-  chromosome=sub(".*[.]", "", rownames(all.features.mat)),
-  feature=all.features.mat[, "log2.n"],
-  target.mat)
-
-## The log2.n feature is log(log(n = number of data points to segment)).
-
-## The model selection criterion is argmin_K totalSquareLoss_K +
-## lambda * K where K is the number of segments in the piecewise
-## constant model, and lambda is a non-negative penalty constant.
-
-## The target.mat contains the interval of log(lambda) values for
-## which the number of incorrect labels is minimized.
-
-## The BIC model selection criterion is lambda = log(n), where n is
-## the number of data points to segment. This implies log(lambda) =
-## log(log(n)) = the log2.n feature in all.features.mat.
-
-## We can thus visualize the BIC penalty as a line with slope 1 and
-## intercept 0 in a plot of log(lambda) versus log(log(n)).
-BIC.df <- data.frame(slope=1, intercept=0, model.name="BIC")
-train.dt[, pred.log.lambda := feature ] #for the BIC
-train.dt$model.name <- "BIC"
-train.dt[, residual := {
-  targetIntervalResidual(cbind(min.L, max.L), pred.log.lambda)
-}]
-
-possible <- train.dt[, list(
-  negative=sum(-Inf < min.L),
-  positive=sum(max.L < Inf)
-  )]
-
-total.BIC <- train.dt[, list(
-  total.residual=sum(residual),
-  intervals=.N
-  ), by=.(model.name, sign.residual=sign(residual))]
-total.BIC
-
-gg <- ggplot()+
-  geom_text(aes(
-    1.4, 6, color=model.name,
-    label=sprintf(
-      "total too high = %.1f (%d intervals / %d possible)",
-      total.residual, intervals, possible$negative)),
-            data=total.BIC[sign.residual==1, ],
-            hjust=0)+
-  geom_text(aes(
-    1.4, 5.5, color=model.name,
-    label=sprintf("%d intervals correctly predicted", intervals)),
-            data=total.BIC[sign.residual==0, ],
-            hjust=0)+
-  geom_segment(aes(
-    feature, pred.log.lambda, xend=feature, color=model.name,
-    yend=ifelse(residual==0, NA, pred.log.lambda-residual)),
-               size=1,
-               linetype="dotted",
-               data=train.dt)+
-  geom_abline(aes(slope=slope, intercept=intercept, color=model.name), data=BIC.df, size=1)+
-  geom_point(aes(feature, ifelse(is.finite(min.L), min.L, NA), fill="min"), data=train.dt, shape=21)+
-  geom_point(aes(feature, ifelse(is.finite(max.L), max.L, NA), fill="max"), data=train.dt, shape=21)+
-  scale_fill_manual("limit", values=c(min="black", max="white"))+
-  scale_color_manual(values=c(BIC="red", learned="deepskyblue"))+
-  scale_x_continuous("feature = log(log(n = number of data points to segment))")+
-  scale_y_continuous("<-- more changes     log(penalty)     less changes -->")
-print(gg)
-
-
-gg <- ggplot()+
-  geom_text(aes(
-    1.4, 6, color=model.name,
-    label=sprintf(
-      "total too high = %.1f (%d intervals / %d possible)",
-      total.residual, intervals, possible$negative)),
-            data=total.BIC[sign.residual==1, ],
-            hjust=0)+
-  geom_text(aes(
-    1.4, 5.5, color=model.name,
-    label=sprintf("%d intervals correctly predicted", intervals)),
-            data=total.BIC[sign.residual==0, ],
-            hjust=0)+
-  geom_segment(aes(
-    feature, pred.log.lambda, xend=feature, color=model.name,
-    yend=ifelse(residual==0, NA, pred.log.lambda-residual)),
-               size=1,
-               linetype="dotted",
-               data=train.dt)+
-  geom_abline(aes(slope=slope, intercept=intercept, color=model.name), data=BIC.df, size=1)+
-  geom_point(aes(feature, ifelse(is.finite(min.L), min.L, NA), fill="min"), data=train.dt, shape=21)+
-  geom_point(aes(feature, ifelse(is.finite(max.L), max.L, NA), fill="max"), data=train.dt, shape=21)+
-  scale_fill_manual("limit", values=c(min="black", max="white"))+
-  scale_color_manual(values=c(BIC="red", learned="deepskyblue"))+
-  scale_x_continuous("feature = log(log(n = number of data points to segment))")+
-  scale_y_continuous("<-- more changes     log(penalty)     less changes -->")
-print(gg)
-
-## Bug?
-## fit <- survreg(Surv(min.L, max.L, type="interval2") ~ feature, train.dt, dist="gaussian")
-## Error in coxph.wtest(t(x) %*% (wt * x), c((wt * eta + weights * deriv$dg) %*%  : 
-##   NA/NaN/Inf in foreign function call (arg 3)
-
-fit <- with(train.dt, {
-  IntervalRegressionUnregularized(
-    cbind(feature), cbind(min.L, max.L))
-})
-pred.dt <- data.table(train.dt)
-pred.dt[, pred.log.lambda := fit$predict(cbind(feature))]
-pred.dt[, residual := targetIntervalResidual(cbind(min.L, max.L), pred.log.lambda)]
-pred.dt$model.name <- "learned"
-total.learned <- pred.dt[, list(
-  total.residual=sum(residual),
-  intervals=.N
-  ), by=.(model.name, sign.residual=sign(residual))]
-total.learned
-
-learned.slope <- with(fit, param.mat["feature",]/sd.vec)
-learned.intercept <- fit$param.mat["(Intercept)",]-learned.slope*fit$mean.vec
-gg+
-  geom_text(aes(
-    1.8, -4.5, color=model.name,
-    label=sprintf("%d intervals correctly predicted", intervals)),
-            data=total.learned[sign.residual==0, ],
-            hjust=0)+
-  geom_text(aes(
-    1.8, -5, color=model.name,
-    label=sprintf(
-      "total too low = %.1f (%d intervals / %d possible)",
-      total.residual, intervals, possible$positive)),
-            data=total.learned[sign.residual==-1, ],
-            hjust=0)+
-  geom_segment(aes(
-    feature, pred.log.lambda, xend=feature, color=model.name,
-    yend=ifelse(residual==0, NA, pred.log.lambda-residual)),
-               linetype="solid",
-               data=pred.dt)+
-  geom_abline(
-    aes(
-      slope=learned.slope,
-      intercept=learned.intercept
+model.fun.list <- list(
+  BIC=function(train.dt){
+    data.table(slope=1, intercept=0)
+  }, learned=function(train.dt){
+    target.mat <- train.dt[, cbind(min.L, max.L)]
+    feature.mat <- train.dt[, cbind(feature)]
+    fit <- IntervalRegressionUnregularized(feature.mat, target.mat)
+    slope <- with(fit, param.mat["feature",]/sd.vec)
+    data.table(
+      slope,
+      intercept=fit$param.mat["(Intercept)",]-slope*fit$mean.vec
       )
-  )+
-  geom_line(aes(
-    feature, pred.log.lambda, color=model.name), data=pred.dt)
+  })
+model.label.vec <- c(
+  BIC="BIC penalty, feature=log(log(n))",
+  learned="Learned penalty, feature=log(var.est)")
+feature.name.vec <- c(
+  BIC="log2.n",
+  learned="log.mad")
+train.dt.list <- list()
+totals.list <- list()
+reg.line.list <- list()
+for(model.name in names(feature.name.vec)){
+  model.label <- model.label.vec[[model.name]]
+  feature.name <- feature.name.vec[[model.name]]
+  model.train.dt <- data.table(
+    model.name, model.label,
+    profile.id=sub("[.].*", "", rownames(all.features.mat)),
+    chromosome=sub(".*[.]", "", rownames(all.features.mat)),
+    feature=all.features.mat[, feature.name],
+    target.mat)
+  model.fun <- model.fun.list[[model.name]]
+  reg.dt <- data.table(model.fun(model.train.dt), model.name, model.label)
+  reg.line.list[[model.name]] <- reg.dt
+  model.train.dt[, pred.log.lambda := reg.dt[, feature*slope+intercept] ]
+  model.train.dt[, residual := {
+    targetIntervalResidual(cbind(min.L, max.L), pred.log.lambda)
+  }]
+  possible <- model.train.dt[, list(
+    positive=sum(-Inf < min.L),
+    negative=sum(max.L < Inf)
+    )]
+  min.feature <- min(model.train.dt$feature)
+  totals.list[[model.name]] <- model.train.dt[, list(
+    feature=min.feature,
+    total.residual=sum(residual),
+    intervals=.N
+    ), by=.(model.name, model.label, sign.residual=sign(residual))]
+  train.dt.list[[model.name]] <- model.train.dt
+}
+train.dt <- do.call(rbind, train.dt.list)
+totals <- do.call(rbind, totals.list)
+reg.line <- do.call(rbind, reg.line.list)
+gg <- ggplot()+
+  theme_bw()+
+  theme(panel.margin=grid::unit(0, "lines"))+
+  facet_grid(. ~ model.label, scales="free")+
+  geom_text(aes(
+    feature, 4, 
+    label=sprintf(
+      "total too high = %.1f (%d intervals / %d possible)",
+      total.residual, intervals, possible$negative)),
+            data=totals[sign.residual==1, ],
+            hjust=0)+
+  geom_text(aes(
+    feature, 3.5, 
+    label=sprintf("%d intervals correctly predicted", intervals)),
+            data=totals[sign.residual==0, ],
+            hjust=0)+
+  geom_segment(aes(
+    feature, pred.log.lambda, xend=feature, 
+    yend=ifelse(residual==0, NA, pred.log.lambda-residual)),
+               size=1,
+               linetype="dotted",
+               data=train.dt)+
+  geom_abline(aes(slope=slope, intercept=intercept), data=reg.line, size=1)+
+  geom_point(aes(feature, ifelse(is.finite(min.L), min.L, NA), fill="min"), data=train.dt, shape=21)+
+  geom_point(aes(feature, ifelse(is.finite(max.L), max.L, NA), fill="max"), data=train.dt, shape=21)+
+  scale_fill_manual("limit", values=c(min="black", max="white"))+
+  scale_x_continuous("feature")+
+  scale_y_continuous("<-- more changes     log(penalty)     less changes -->")
+print(gg)
 
-## TODO: linked regression
+
 
 model.list <- list(
   BIC=train.dt,
