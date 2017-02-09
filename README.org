@@ -1,15 +1,24 @@
 ** TODOs
 
-Check out coarseDataTools::EMforCFR, adapEnetClass, icenReg
+Check out coarseDataTools::EMforCFR, adapEnetClass, icenReg, and
+non-linear models.
 
 Package for geom_tallrect / widerect.
-
-Package for exactModelSelection and targetInterval.
 
 Copy and adapt tutorial materials from [[https://github.com/eRum2016/Workshops/blob/master/details/An%2520introduction%2520to%2520changepoint%2520models%2520using%2520R.md][Rebecca's eRum2016 workshop]].
 
 Scripts or Rmds for different steps in the supervised penalty learning
 process.
+
+** 9 Feb 2017
+
+[[file:figure-regression-interactive-some.R]] for interactive figure with
+a few profiles that we can zoom in to.
+
+[[file:figure-regression-interactive.R]] for comparing BIC and learned
+model on entire neuroblastoma data set.
+
+penaltyLearning package for exactModelSelection and targetInterval.
 
 ** 25 Nov 2016
 

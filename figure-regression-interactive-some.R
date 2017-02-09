@@ -2,16 +2,20 @@ source("packages.R")
 
 load("breakpoint.learning.RData")
 load("Segmentor.models.RData")
-target.mat <- breakpoint.learning$targets$original
+ids.str <- paste(c(1, 4, 6, 8, 10, 11))
+all.target.mat <- breakpoint.learning$targets$original
+target.mat <- all.target.mat[sub("[.].*", "", rownames(all.target.mat)) %in% ids.str, ]
 all.features.mat <- breakpoint.learning$features[rownames(target.mat), ]
+
 
 data(neuroblastoma, package="neuroblastoma")
 selection <- Segmentor.models$loss[, modelSelection(
   .SD, complexity="n.segments"
   ), by=.(profile.id, chromosome)]
 changes <- Segmentor.models$segs[1 < start, ]
+some.anns <- data.table(neuroblastoma$annotations)[profile.id %in% ids.str,]
 errors <- labelError(
-  selection, neuroblastoma$annotations, changes,
+  selection, some.anns, changes,
   change.var="chromStart",
   label.vars=c("min", "max"),
   model.vars="n.segments",
@@ -46,7 +50,9 @@ train.dt <- data.table(
 BIC.df <- data.frame(slope=1, intercept=0, model.name="BIC")
 train.dt[, pred.log.lambda := feature ] #for the BIC
 train.dt$model.name <- "BIC"
-train.dt[, residual := targetIntervalResidual(cbind(min.L, max.L), pred.log.lambda)]
+train.dt[, residual := {
+  targetIntervalResidual(cbind(min.L, max.L), pred.log.lambda)
+}]
 
 possible <- train.dt[, list(
   negative=sum(-Inf < min.L),
@@ -71,13 +77,6 @@ gg <- ggplot()+
     1.4, 5.5, color=model.name,
     label=sprintf("%d intervals correctly predicted", intervals)),
             data=total.BIC[sign.residual==0, ],
-            hjust=0)+
-  geom_text(aes(
-    1.4, 5, color=model.name,
-    label=sprintf(
-      "total too low = %.1f (%d intervals / %d possible)",
-      total.residual, intervals, possible$positive)),
-            data=total.BIC[sign.residual==-1, ],
             hjust=0)+
   geom_segment(aes(
     feature, pred.log.lambda, xend=feature, color=model.name,
@@ -107,13 +106,6 @@ gg <- ggplot()+
     1.4, 5.5, color=model.name,
     label=sprintf("%d intervals correctly predicted", intervals)),
             data=total.BIC[sign.residual==0, ],
-            hjust=0)+
-  geom_text(aes(
-    1.4, 5, color=model.name,
-    label=sprintf(
-      "total too low = %.1f (%d intervals / %d possible)",
-      total.residual, intervals, possible$positive)),
-            data=total.BIC[sign.residual==-1, ],
             hjust=0)+
   geom_segment(aes(
     feature, pred.log.lambda, xend=feature, color=model.name,
@@ -152,13 +144,6 @@ total.learned
 learned.slope <- with(fit, param.mat["feature",]/sd.vec)
 learned.intercept <- fit$param.mat["(Intercept)",]-learned.slope*fit$mean.vec
 gg+
-  geom_text(aes(
-    1.8, -4, color=model.name,
-    label=sprintf(
-      "total too high = %.1f (%d intervals / %d possible)",
-      total.residual, intervals, possible$negative)),
-            data=total.learned[sign.residual==1, ],
-            hjust=0)+
   geom_text(aes(
     1.8, -4.5, color=model.name,
     label=sprintf("%d intervals correctly predicted", intervals)),
@@ -404,8 +389,15 @@ for(row.i in 1:nrow(pred.thresh.only)){
   r <- pred.thresh.only[row.i, ]
   viz$first[[paste0(r$model.name, ".thresh")]] <- r$mid.thresh
 }
-animint2dir(viz, "figure-regression-interactive")
+animint2dir(viz, "figure-regression-interactive-some")
 
+## TODO: facet_grid in regression plot, with second panel showing
+## learned model in log(n) space. or maybe a single panel with
+## showSelected=model, key=profile (dots, regression line,
+## residuals/margin move to new positions when model changes).
+
+## TODO: plot data with showSelected=profile, model and labels/errors
+## with showSelected=model.
 
 ggplot()+
   theme_bw()+
