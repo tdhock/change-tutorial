@@ -62,9 +62,11 @@ for(model.name in names(feature.name.vec)){
   reg.dt <- data.table(model.fun(model.train.dt), model.name, model.label)
   reg.line.list[[model.name]] <- reg.dt
   model.train.dt[, pred.log.lambda := reg.dt[, feature*slope+intercept] ]
-  ## model.train.dt[, residual := {
-  ##   targetIntervalResidual(cbind(min.log.lambda, max.log.lambda), pred.log.lambda)
-  ## }]
+  ## This residual is for the non-interactive plot.
+  model.train.dt[, residual := {
+    targetIntervalResidual(
+      cbind(min.log.lambda, max.log.lambda), pred.log.lambda)
+  }]
   possible <- model.train.dt[, list(
     positive=sum(-Inf < min.log.lambda),
     negative=sum(max.log.lambda < Inf)
@@ -303,6 +305,12 @@ for(row.i in 1:nrow(pred.thresh.only)){
   viz$first[[paste0(r$model.name, ".thresh")]] <- r$mid.thresh
 }
 animint2dir(viz, "figure-regression-interactive-some")
+
+## NOTE: the total number of incorrect targets in the regression plot
+## is sometimes inconsistent with the number of incorrect labels in
+## the threshold plot. TODO: show model selection function, incorrect
+## labels, and targets interval, as a function of log.lambda, for the
+## selected profile.
 
 ## TODO: plot data with showSelected=profile, model and labels/errors
 ## with showSelected=model.
