@@ -8,9 +8,10 @@ selection <-
   Segmentor.models$loss[profile.id %in% ids.str, modelSelection(
     .SD, complexity="n.segments"
   ), by=.(profile.id, chromosome)]
-changes <- Segmentor.models$segs[1 < start, ]
 some.anns <- data.table(
   neuroblastoma$annotations)[profile.id %in% ids.str,]
+changes <- Segmentor.models$segs[
+  1 < start & profile.id %in% ids.str & chromosome %in% some.anns$chromosome, ]
 errors <- labelError(
   selection, some.anns, changes,
   change.var="chromStart",
@@ -20,10 +21,12 @@ errors <- labelError(
 
 target.dt <- targetIntervals(
   errors$model.errors, c("profile.id", "chromosome"))
-feature.dt <- data.table(neuroblastoma$profiles)[target.dt, list(
+some.profiles <- data.table(
+  neuroblastoma$profiles)[target.dt, on=.(profile.id, chromosome)]
+feature.dt <-  some.profiles[, list(
   log2.n=log(log(.N)),
   log.mad=log(median(abs(diff(logratio))))
-), by=.EACHI, on=.(profile.id, chromosome)]
+), by=.(profile.id, chromosome)]
 
 model.fun.list <- list(
   BIC=function(train.dt){
@@ -177,8 +180,27 @@ ggplot()+
 auc[, TPR := c(0.85, 0.9)]
 auc[, FPR := 0.2]
 thresh.colors <- c(predicted="green", "min.error"="black", other="white")
+some.profiles[, profile.chrom := paste(profile.id, chromosome)]
+some.anns[, profile.chrom := paste(profile.id, chromosome)]
+train.dt[, profile.chrom := paste(profile.id, chromosome)]
+breakpoint.colors <- c(
+  "breakpoint"="#a445ee",
+  "normal"="#f6f4bf")
 viz <- list(
   title="BIC versus learned penalty in neuroblastoma data",
+  profile=ggplot()+
+    theme_bw()+
+    theme_animint(width=600)+
+    scale_fill_manual("label", values=breakpoint.colors)+
+    geom_tallrect(aes(xmin=min/1e6, xmax=max/1e6,
+                      showSelected=profile.chrom,
+                      fill=annotation),
+                  alpha=0.5,
+                  data=some.anns)+
+    geom_point(aes(position/1e6, logratio,
+                   showSelected=profile.chrom),
+               fill=NA,
+               data=some.profiles),
   thresholds=ggplot()+
     theme_bw()+
     guides(fill="none", color="none")+
@@ -214,6 +236,63 @@ viz <- list(
                data=roc[threshold!="other",],
                size=4,
                shape=21),
+  regression=ggplot()+
+    theme_bw()+
+    theme(panel.margin=grid::unit(0, "lines"))+
+    facet_grid(. ~ model.label, scales="free")+
+    theme_animint(width=600)+
+    geom_text(aes(
+      left, log.penalty, 
+      color=model.name,
+      showSelected.variable=paste0(model.name, ".thresh"),
+      showSelected.value=mid.thresh,
+      label=ifelse(sign.residual==0, sprintf(
+        "%d intervals correctly predicted", intervals), sprintf(
+        "total too %s = %.1f (%d/%d intervals)",
+          ifelse(sign.residual==1, "high", "low"),
+          total.residual, intervals,
+          possible[, ifelse(sign.residual==1, negative, positive)]))),
+              data=total.labels,
+              hjust=0)+
+    geom_abline(aes(slope=slope,
+                    ##showSelected=model.name,
+                    color=model.name,
+                    showSelected.variable=paste0(model.name, ".thresh"),
+                    showSelected.value=mid.thresh,
+                    intercept=intercept+mid.thresh),
+                data=all.reg.lines)+
+    geom_segment(aes(
+      feature, pred.plus.thresh,
+      xend=feature, yend=pred.plus.thresh-residual, 
+      ##showSelected=model.name,
+      color=model.name,
+      showSelected.variable=paste0(model.name, ".thresh"),
+      showSelected.value=mid.thresh),
+                 size=1,
+                 data=residual.thresh.pred)+
+    geom_point(aes(feature, min.log.lambda,
+                   ##showSelected=model.name,
+                   clickSelects=profile.chrom,
+                   fill=limit),
+               data=data.table(
+                 limit="min", train.dt[is.finite(min.log.lambda),]),
+               alpha=0.8,
+               size=4,
+               shape=21)+
+    geom_point(aes(feature, max.log.lambda,
+                   clickSelects=profile.chrom,
+                   ##showSelected=model.name,
+                   fill=limit),
+               data=data.table(
+                 limit="max", train.dt[is.finite(max.log.lambda),]),
+               size=4,
+               alpha=0.8,
+               shape=21)+
+    guides(color="none")+
+    scale_fill_manual(values=c(min="black", max="white"))+
+    scale_color_manual(values=model.colors)+
+    scale_x_continuous("feature")+
+    scale_y_continuous("<-- more changes log(penalty) less changes -->"),
   roc=ggplot()+
     theme_bw()+
     ##guides(color="none")+
@@ -248,55 +327,6 @@ viz <- list(
                alpha=0.7,
                shape=21)+
     coord_equal(),
-  regression=ggplot()+
-    theme_bw()+
-    theme(panel.margin=grid::unit(0, "lines"))+
-    facet_grid(. ~ model.label, scales="free")+
-    theme_animint(width=600)+
-    geom_text(aes(
-      left, log.penalty, 
-      color=model.name,
-      showSelected.variable=paste0(model.name, ".thresh"),
-      showSelected.value=mid.thresh,
-      label=ifelse(sign.residual==0, sprintf(
-        "%d intervals correctly predicted", intervals), sprintf(
-        "total too %s = %.1f (%d/%d intervals)",
-          ifelse(sign.residual==1, "high", "low"),
-          total.residual, intervals,
-          possible[, ifelse(sign.residual==1, negative, positive)]))),
-              data=total.labels,
-              hjust=0)+
-    geom_point(aes(feature, min.log.lambda,
-                   ##showSelected=model.name,
-                   fill=limit),
-               data=data.table(limit="min", train.dt[is.finite(min.log.lambda),]),
-               shape=21)+
-    geom_point(aes(feature, max.log.lambda,
-                   ##showSelected=model.name,
-                   fill=limit),
-               data=data.table(limit="max", train.dt[is.finite(max.log.lambda),]),
-               shape=21)+
-    geom_abline(aes(slope=slope,
-                    ##showSelected=model.name,
-                    color=model.name,
-                    showSelected.variable=paste0(model.name, ".thresh"),
-                    showSelected.value=mid.thresh,
-                    intercept=intercept+mid.thresh),
-                data=all.reg.lines)+
-    guides(color="none")+
-    geom_segment(aes(
-      feature, pred.plus.thresh,
-      xend=feature, yend=pred.plus.thresh-residual, 
-      ##showSelected=model.name,
-      color=model.name,
-      showSelected.variable=paste0(model.name, ".thresh"),
-      showSelected.value=mid.thresh),
-                 size=1,
-                 data=residual.thresh.pred)+
-    scale_fill_manual(values=c(min="black", max="white"))+
-    scale_color_manual(values=model.colors)+
-    scale_x_continuous("feature")+
-    scale_y_continuous("<-- more changes log(penalty) less changes -->"),
   first=list(),
   selector.types=list(model.name="single"))
 pred.thresh.only <- roc[min.thresh < 0 & 0 < max.thresh,]
@@ -310,7 +340,7 @@ animint2dir(viz, "figure-regression-interactive-some")
 ## is sometimes inconsistent with the number of incorrect labels in
 ## the threshold plot. TODO: show model selection function, incorrect
 ## labels, and targets interval, as a function of log.lambda, for the
-## selected profile.
+## selected profile?
 
 ## TODO: plot data with showSelected=profile, model and labels/errors
 ## with showSelected=model.
