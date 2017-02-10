@@ -1,19 +1,16 @@
 source("packages.R")
 
-load("breakpoint.learning.RData")
-load("Segmentor.models.RData")
-ids.str <- paste(c(1, 4, 6, 8, 10, 11))
-all.target.mat <- breakpoint.learning$targets$original
-target.mat <- all.target.mat[sub("[.].*", "", rownames(all.target.mat)) %in% ids.str, ]
-all.features.mat <- breakpoint.learning$features[rownames(target.mat), ]
-
-
 data(neuroblastoma, package="neuroblastoma")
-selection <- Segmentor.models$loss[, modelSelection(
-  .SD, complexity="n.segments"
+load("Segmentor.models.RData")
+
+ids.str <- paste(c(1, 4, 6, 8, 10, 11))
+selection <-
+  Segmentor.models$loss[profile.id %in% ids.str, modelSelection(
+    .SD, complexity="n.segments"
   ), by=.(profile.id, chromosome)]
 changes <- Segmentor.models$segs[1 < start, ]
-some.anns <- data.table(neuroblastoma$annotations)[profile.id %in% ids.str,]
+some.anns <- data.table(
+  neuroblastoma$annotations)[profile.id %in% ids.str,]
 errors <- labelError(
   selection, some.anns, changes,
   change.var="chromStart",
@@ -21,11 +18,18 @@ errors <- labelError(
   model.vars="n.segments",
   problem.vars=c("profile.id", "chromosome"))
 
+target.dt <- targetIntervals(
+  errors$model.errors, c("profile.id", "chromosome"))
+feature.dt <- data.table(neuroblastoma$profiles)[target.dt, list(
+  log2.n=log(log(.N)),
+  log.mad=log(median(abs(diff(logratio))))
+), by=.EACHI, on=.(profile.id, chromosome)]
+
 model.fun.list <- list(
   BIC=function(train.dt){
     data.table(slope=1, intercept=0)
   }, learned=function(train.dt){
-    target.mat <- train.dt[, cbind(min.L, max.L)]
+    target.mat <- train.dt[, cbind(min.log.lambda, max.log.lambda)]
     feature.mat <- train.dt[, cbind(feature)]
     fit <- IntervalRegressionUnregularized(feature.mat, target.mat)
     slope <- with(fit, param.mat["feature",]/sd.vec)
@@ -52,20 +56,18 @@ for(model.name in names(feature.name.vec)){
   feature.name <- feature.name.vec[[model.name]]
   model.train.dt <- data.table(
     model.name, model.label,
-    profile.id=sub("[.].*", "", rownames(all.features.mat)),
-    chromosome=sub(".*[.]", "", rownames(all.features.mat)),
-    feature=all.features.mat[, feature.name],
-    target.mat)
+    target.dt,
+    feature=feature.dt[[feature.name]])
   model.fun <- model.fun.list[[model.name]]
   reg.dt <- data.table(model.fun(model.train.dt), model.name, model.label)
   reg.line.list[[model.name]] <- reg.dt
   model.train.dt[, pred.log.lambda := reg.dt[, feature*slope+intercept] ]
-  model.train.dt[, residual := {
-    targetIntervalResidual(cbind(min.L, max.L), pred.log.lambda)
-  }]
+  ## model.train.dt[, residual := {
+  ##   targetIntervalResidual(cbind(min.log.lambda, max.log.lambda), pred.log.lambda)
+  ## }]
   possible <- model.train.dt[, list(
-    positive=sum(-Inf < min.L),
-    negative=sum(max.L < Inf)
+    positive=sum(-Inf < min.log.lambda),
+    negative=sum(max.log.lambda < Inf)
     )]
   min.feature <- min(model.train.dt$feature)
   totals.list[[model.name]] <- model.train.dt[, list(
@@ -122,8 +124,8 @@ gg <- ggplot()+
                linetype="dotted",
                data=train.dt)+
   geom_abline(aes(slope=slope, intercept=intercept), data=reg.line, size=1)+
-  geom_point(aes(feature, ifelse(is.finite(min.L), min.L, NA), fill="min"), data=train.dt, shape=21)+
-  geom_point(aes(feature, ifelse(is.finite(max.L), max.L, NA), fill="max"), data=train.dt, shape=21)+
+  geom_point(aes(feature, ifelse(is.finite(min.log.lambda), min.log.lambda, NA), fill="min"), data=train.dt, shape=21)+
+  geom_point(aes(feature, ifelse(is.finite(max.log.lambda), max.log.lambda, NA), fill="max"), data=train.dt, shape=21)+
   scale_fill_manual("limit", values=c(min="black", max="white"))+
   scale_x_continuous("feature")+
   scale_y_continuous("<-- more changes     log(penalty)     less changes -->")
@@ -139,7 +141,7 @@ setkey(roc, model.name, model.label)
 some.thresh.pred <- train.dt[roc, allow.cartesian=TRUE]
 some.thresh.pred[, pred.plus.thresh := pred.log.lambda + mid.thresh]
 some.thresh.pred[, residual := {
-  targetIntervalResidual(cbind(min.L, max.L), pred.plus.thresh)
+  targetIntervalResidual(cbind(min.log.lambda, max.log.lambda), pred.plus.thresh)
 }]
 total.thresh.pred <- some.thresh.pred[, list(
   total.residual=sum(residual),
@@ -262,15 +264,15 @@ viz <- list(
           possible[, ifelse(sign.residual==1, negative, positive)]))),
               data=total.labels,
               hjust=0)+
-    geom_point(aes(feature, min.L,
+    geom_point(aes(feature, min.log.lambda,
                    ##showSelected=model.name,
                    fill=limit),
-               data=data.table(limit="min", train.dt[is.finite(min.L),]),
+               data=data.table(limit="min", train.dt[is.finite(min.log.lambda),]),
                shape=21)+
-    geom_point(aes(feature, max.L,
+    geom_point(aes(feature, max.log.lambda,
                    ##showSelected=model.name,
                    fill=limit),
-               data=data.table(limit="max", train.dt[is.finite(max.L),]),
+               data=data.table(limit="max", train.dt[is.finite(max.log.lambda),]),
                shape=21)+
     geom_abline(aes(slope=slope,
                     ##showSelected=model.name,
