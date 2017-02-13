@@ -10,6 +10,8 @@ Copy and adapt tutorial materials from [[https://github.com/eRum2016/Workshops/b
 Scripts or Rmds for different steps in the supervised penalty learning
 process.
 
+** 13 Feb 2017
+[[file:figure-regression-interactive-some.R]] creates [[http://bl.ocks.org/tdhock/raw/eee5fd673c258ae554702d9c7c60f69b/][5 plot interactive data viz]].
 ** 9 Feb 2017
 
 [[file:figure-regression-interactive-some.R]] for interactive figure with
