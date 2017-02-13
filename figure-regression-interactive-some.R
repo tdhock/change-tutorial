@@ -371,6 +371,13 @@ viz <- list(
                size=4,
                alpha=0.8,
                shape=21)+
+    geom_point(aes(feature,
+                   pred.log.lambda+mid.thresh,
+                   showSelected=profile.chrom,
+                   showSelected.variable=paste0(model.name, ".thresh"),
+                   showSelected.value=mid.thresh,
+                   color=model.name),
+               data=selection.thresh)+
     guides(color="none")+
     scale_fill_manual(values=c(min="black", max="white"))+
     scale_color_manual(values=model.colors)+
