@@ -165,6 +165,7 @@ total.thresh.pred <- some.thresh.pred[, list(
   ), by=.(model.name, model.label, sign.residual=sign(residual), mid.thresh)]
 total.thresh.pred
 residual.thresh.pred <- some.thresh.pred[residual!=0,]
+residual.thresh.pred <- some.thresh.pred
 space.dt <- rbind(
   BIC=data.table(model.name="BIC", left=1.55, top=4.5, space=0.5),
   learned=data.table(model.name="learned", left=-3.3, top=4.5, space=0.5))
@@ -237,10 +238,12 @@ viz <- list(
                   data=labels.thresh)+
     geom_segment(aes(chromStart/1e6, 1,
                      xend=chromStart/1e6, yend=-1,
+                     key=paste(model.name, chromStart),
                      showSelected.variable=paste0(model.name, ".thresh"),
                      showSelected.value=mid.thresh,
                      showSelected=profile.chrom,
                      color=model.name, size=model.name),
+                 linetype="dashed",
                data=changes.thresh)+
     geom_point(aes(position/1e6, logratio,
                    showSelected=profile.chrom),
@@ -258,6 +261,7 @@ viz <- list(
                   alpha=0.2,
                   data=roc)+
     geom_vline(aes(xintercept=mid.thresh, color=model.name,
+                   key=model.name,
                    showSelected.variable=paste0(model.name, ".thresh"),
                    showSelected.value=mid.thresh,
                    showSelected=model.name),
@@ -329,6 +333,7 @@ viz <- list(
       color=model.name,
       showSelected.variable=paste0(model.name, ".thresh"),
       showSelected.value=mid.thresh,
+      key=paste(model.name, sign.residual),
       label=ifelse(sign.residual==0, sprintf(
         "%d intervals correctly predicted", intervals), sprintf(
         "total too %s = %.1f (%d/%d intervals)",
@@ -339,6 +344,7 @@ viz <- list(
               hjust=0)+
     geom_abline(aes(slope=slope,
                     ##showSelected=model.name,
+                    key=model.name,
                     color=model.name,
                     showSelected.variable=paste0(model.name, ".thresh"),
                     showSelected.value=mid.thresh,
@@ -348,6 +354,7 @@ viz <- list(
       feature, pred.plus.thresh,
       xend=feature, yend=pred.plus.thresh-residual, 
       ##showSelected=model.name,
+      key=paste(model.name, profile.id, chromosome),
       color=model.name,
       showSelected.variable=paste0(model.name, ".thresh"),
       showSelected.value=mid.thresh),
@@ -394,6 +401,7 @@ viz <- list(
     geom_vline(aes(
       xintercept=pred.log.lambda+mid.thresh,
       color=model.name,
+      key=model.name,
       showSelected.variable=paste0(model.name, ".thresh"),
       showSelected.value=mid.thresh,
       showSelected=profile.chrom,
@@ -410,12 +418,14 @@ viz <- list(
       showSelected=profile.chrom),
       data=selection.melt)+
     scale_color_manual(values=model.colors),
-  first=list(),
+  first=list(profile.chrom="8 2"),
+  duration=list(),
   selector.types=list(model.name="single"))
 pred.thresh.only <- roc[min.thresh < 0 & 0 < max.thresh,]
 for(row.i in 1:nrow(pred.thresh.only)){
   r <- pred.thresh.only[row.i, ]
   viz$first[[paste0(r$model.name, ".thresh")]] <- r$mid.thresh
+  viz$duration[[paste0(r$model.name, ".thresh")]] <- 2000
 }
 animint2dir(viz, "figure-regression-interactive-some")
 
