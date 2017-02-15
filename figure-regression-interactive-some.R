@@ -71,8 +71,8 @@ for(model.name in names(feature.name.vec)){
       cbind(min.log.lambda, max.log.lambda), pred.log.lambda)
   }]
   possible <- model.train.dt[, list(
-    positive=sum(-Inf < min.log.lambda),
-    negative=sum(max.log.lambda < Inf)
+    negative=sum(-Inf < min.log.lambda),
+    positive=sum(max.log.lambda < Inf)
     )]
   min.feature <- min(model.train.dt$feature)
   totals.list[[model.name]] <- model.train.dt[, list(
@@ -114,7 +114,7 @@ gg <- ggplot()+
     feature, 4, 
     label=sprintf(
       "total too high = %.1f (%d intervals / %d possible)",
-      total.residual, intervals, possible$negative)),
+      total.residual, intervals, possible$positive)),
             data=totals[sign.residual==1, ],
             hjust=0)+
   geom_text(aes(
@@ -339,7 +339,7 @@ viz <- list(
         "total too %s = %.1f (%d/%d intervals)",
           ifelse(sign.residual==1, "high", "low"),
           total.residual, intervals,
-          possible[, ifelse(sign.residual==1, negative, positive)]))),
+          possible[, ifelse(sign.residual==1, positive, negative)]))),
               data=total.labels,
               hjust=0)+
     geom_abline(aes(slope=slope,

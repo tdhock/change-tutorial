@@ -45,50 +45,10 @@ train.dt$model.name <- "BIC"
 train.dt[, residual := targetIntervalResidual(cbind(min.log.lambda, max.log.lambda), pred.log.lambda)]
 
 possible <- train.dt[, list(
-  positive=sum(-Inf < min.log.lambda),
-  negative=sum(max.log.lambda < Inf)
+  negative=sum(-Inf < min.log.lambda),
+  positive=sum(max.log.lambda < Inf),
+  total=.N
   )]
-
-total.BIC <- train.dt[, list(
-  total.residual=sum(residual),
-  intervals=.N
-  ), by=.(model.name, sign.residual=sign(residual))]
-total.BIC
-
-gg <- ggplot()+
-  geom_text(aes(
-    1.4, 6, color=model.name,
-    label=sprintf(
-      "total too high = %.1f (%d intervals / %d possible)",
-      total.residual, intervals, possible$negative)),
-            data=total.BIC[sign.residual==1, ],
-            hjust=0)+
-  geom_text(aes(
-    1.4, 5.5, color=model.name,
-    label=sprintf("%d intervals correctly predicted", intervals)),
-            data=total.BIC[sign.residual==0, ],
-            hjust=0)+
-  geom_text(aes(
-    1.4, 5, color=model.name,
-    label=sprintf(
-      "total too low = %.1f (%d intervals / %d possible)",
-      total.residual, intervals, possible$positive)),
-            data=total.BIC[sign.residual==-1, ],
-            hjust=0)+
-  geom_segment(aes(
-    feature, pred.log.lambda, xend=feature, color=model.name,
-    yend=ifelse(residual==0, NA, pred.log.lambda-residual)),
-               size=1,
-               linetype="dotted",
-               data=train.dt)+
-  geom_abline(aes(slope=slope, intercept=intercept, color=model.name), data=BIC.df, size=1)+
-  geom_point(aes(feature, ifelse(is.finite(min.log.lambda), min.log.lambda, NA), fill="min"), data=train.dt, shape=21)+
-  geom_point(aes(feature, ifelse(is.finite(max.log.lambda), max.log.lambda, NA), fill="max"), data=train.dt, shape=21)+
-  scale_fill_manual("limit", values=c(min="black", max="white"))+
-  scale_color_manual(values=c(BIC="red", learned="deepskyblue"))+
-  scale_x_continuous("feature = log(log(n = number of data points to segment))")+
-  scale_y_continuous("<-- more changes     log(penalty)     less changes -->")
-print(gg)
 
 ## Bug?
 ## fit <- survreg(Surv(min.log.lambda, max.log.lambda, type="interval2") ~ feature, train.dt, dist="gaussian")
@@ -103,47 +63,9 @@ pred.dt <- data.table(train.dt)
 pred.dt[, pred.log.lambda := fit$predict(cbind(feature))]
 pred.dt[, residual := targetIntervalResidual(cbind(min.log.lambda, max.log.lambda), pred.log.lambda)]
 pred.dt$model.name <- "learned"
-total.learned <- pred.dt[, list(
-  total.residual=sum(residual),
-  intervals=.N
-  ), by=.(model.name, sign.residual=sign(residual))]
-total.learned
 
 learned.slope <- with(fit, param.mat["feature",]/sd.vec)
 learned.intercept <- fit$param.mat["(Intercept)",]-learned.slope*fit$mean.vec
-gg+
-  geom_text(aes(
-    1.8, -4, color=model.name,
-    label=sprintf(
-      "total too high = %.1f (%d intervals / %d possible)",
-      total.residual, intervals, possible$negative)),
-            data=total.learned[sign.residual==1, ],
-            hjust=0)+
-  geom_text(aes(
-    1.8, -4.5, color=model.name,
-    label=sprintf("%d intervals correctly predicted", intervals)),
-            data=total.learned[sign.residual==0, ],
-            hjust=0)+
-  geom_text(aes(
-    1.8, -5, color=model.name,
-    label=sprintf(
-      "total too low = %.1f (%d intervals / %d possible)",
-      total.residual, intervals, possible$positive)),
-            data=total.learned[sign.residual==-1, ],
-            hjust=0)+
-  geom_segment(aes(
-    feature, pred.log.lambda, xend=feature, color=model.name,
-    yend=ifelse(residual==0, NA, pred.log.lambda-residual)),
-               linetype="solid",
-               data=pred.dt)+
-  geom_abline(
-    aes(
-      slope=learned.slope,
-      intercept=learned.intercept
-      )
-  )+
-  geom_line(aes(
-    feature, pred.log.lambda, color=model.name), data=pred.dt)
 
 model.list <- list(
   BIC=train.dt,
@@ -239,19 +161,17 @@ setkey(both.pred, model.name)
 setkey(some.thresh, model.name)
 some.thresh.pred <- both.pred[some.thresh, allow.cartesian=TRUE]
 some.thresh.pred[, pred.log.lambda := slope * feature + intercept]
-some.thresh.pred[, residual := targetIntervalResidual(cbind(min.log.lambda, max.log.lambda), pred.log.lambda)]
+some.thresh.pred[, residual := targetIntervalResidual(
+  cbind(min.log.lambda, max.log.lambda), pred.log.lambda)]
 total.thresh.pred <- some.thresh.pred[, list(
   total.residual=sum(residual),
   intervals=.N
-  ), by=.(model.name, sign.residual=sign(residual), mid.thresh)]
-total.thresh.pred
+), by=.(model.name, sign.residual=sign(residual), mid.thresh)]
+total.thresh.pred[, top := ifelse(model.name=="BIC", 6.5, -4)]
+total.thresh.pred[, left := ifelse(model.name=="BIC", 1.45, 1.8)]
+total.thresh.pred[, log.penalty := top-(1-sign.residual)*0.7]
 residual.thresh.pred <- some.thresh.pred[residual!=0,]
 
-bic.left <- 1.45
-bic.top <- 6.5
-bic.space <- 0.7
-learned.left <- 1.8
-learned.top <- -4
 thresh.colors <- c(predicted="green", min.error="black", other="white")
 viz <- list(
   title="BIC versus learned penalty in neuroblastoma data",
@@ -314,60 +234,26 @@ viz <- list(
     theme_bw()+
     theme_animint(width=800)+
     geom_text(aes(
-      bic.left, bic.top, color=model.name,
+      left, log.penalty, 
+      color=model.name,
       showSelected.variable=paste0(model.name, ".thresh"),
       showSelected.value=mid.thresh,
-      label=sprintf(
-        "total too high = %.1f (%d intervals / %d possible)",
-        total.residual, intervals, possible$negative)),
-              data=total.thresh.pred[sign.residual==1 & model.name=="BIC", ],
-              hjust=0)+
-    geom_text(aes(
-      bic.left, bic.top-bic.space, color=model.name,
-      showSelected.variable=paste0(model.name, ".thresh"),
-      showSelected.value=mid.thresh,
-      label=sprintf("%d intervals correctly predicted", intervals)),
-              data=total.thresh.pred[sign.residual==0 & model.name=="BIC", ],
-              hjust=0)+
-    geom_text(aes(
-      bic.left, bic.top-bic.space*2, color=model.name,
-      showSelected.variable=paste0(model.name, ".thresh"),
-      showSelected.value=mid.thresh,
-      label=sprintf(
-        "total too low = %.1f (%d intervals / %d possible)",
-        total.residual, intervals, possible$positive)),
-              data=total.thresh.pred[sign.residual==-1 & model.name=="BIC", ],
-              hjust=0)+
-    geom_text(aes(
-      learned.left, learned.top, color=model.name,
-      showSelected.variable=paste0(model.name, ".thresh"),
-      showSelected.value=mid.thresh,
-      label=sprintf(
-        "total too high = %.1f (%d intervals / %d possible)",
-        total.residual, intervals, possible$negative)),
-              data=total.thresh.pred[sign.residual==1 & model.name=="learned", ],
-              hjust=0)+
-    geom_text(aes(
-      learned.left, learned.top-bic.space, color=model.name,
-      showSelected.variable=paste0(model.name, ".thresh"),
-      showSelected.value=mid.thresh,
-      label=sprintf("%d intervals correctly predicted", intervals)),
-              data=total.thresh.pred[sign.residual==0 & model.name=="learned", ],
-              hjust=0)+
-    geom_text(aes(
-      learned.left, learned.top-bic.space*2, color=model.name,
-      showSelected.variable=paste0(model.name, ".thresh"),
-      showSelected.value=mid.thresh,
-      label=sprintf(
-        "total too low = %.1f (%d intervals / %d possible)",
-        total.residual, intervals, possible$positive)),
-              data=total.thresh.pred[sign.residual==-1 & model.name=="learned", ],
+      key=paste(model.name, sign.residual),
+      label=ifelse(sign.residual==0, sprintf(
+        "%d intervals correctly predicted", intervals), sprintf(
+        "total too %s = %.1f (%d/%d intervals)",
+          ifelse(sign.residual==1, "high", "low"),
+          total.residual, intervals,
+          possible[, ifelse(sign.residual==1, positive, negative)]))),
+              data=total.thresh.pred,
               hjust=0)+
     geom_point(aes(feature, min.log.lambda, fill=limit),
-               data=data.table(limit="min", train.dt[is.finite(min.log.lambda),]),
+               data=data.table(
+                 limit="min", train.dt[is.finite(min.log.lambda),]),
                shape=21)+
     geom_point(aes(feature, max.log.lambda, fill=limit),
-               data=data.table(limit="max", train.dt[is.finite(max.log.lambda),]),
+               data=data.table(
+                 limit="max", train.dt[is.finite(max.log.lambda),]),
                shape=21)+
     geom_abline(aes(slope=slope,
                     showSelected.variable=paste0(model.name, ".thresh"),
