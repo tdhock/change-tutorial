@@ -1,13 +1,9 @@
 source("packages.R")
-
-load("breakpoint.learning.RData")
-load("Segmentor.models.RData")
-target.mat <- breakpoint.learning$targets$original
-all.features.mat <- breakpoint.learning$features[rownames(target.mat), ]
-
 data(neuroblastoma, package="neuroblastoma")
-selection <- Segmentor.models$loss[, modelSelection(
-  .SD, complexity="n.segments"
+load("Segmentor.models.RData")
+selection <-
+  Segmentor.models$loss[, modelSelection(
+    .SD, complexity="n.segments"
   ), by=.(profile.id, chromosome)]
 changes <- Segmentor.models$segs[1 < start, ]
 errors <- labelError(
@@ -16,17 +12,17 @@ errors <- labelError(
   label.vars=c("min", "max"),
   model.vars="n.segments",
   problem.vars=c("profile.id", "chromosome"))
-neuroblastomaProcessed <- list(
-  feature.mat=all.features.mat,
-  target.mat=target.mat,
-  errors=errors$model.errors)
-##save(neuroblastomaProcessed, file="~/R/penaltyLearning/data/neuroblastomaProcessed.RData", compress="xz")
-
+target.dt <- targetIntervals(
+  errors$model.errors, c("profile.id", "chromosome"))
+some.profiles <- data.table(
+  neuroblastoma$profiles)[target.dt, on=.(profile.id, chromosome)]
+feature.dt <-  some.profiles[, list(
+  log2.n=log(log(.N)),
+  log.mad=log(median(abs(diff(logratio))))
+), by=.(profile.id, chromosome)]
 train.dt <- data.table(
-  profile.id=sub("[.].*", "", rownames(all.features.mat)),
-  chromosome=sub(".*[.]", "", rownames(all.features.mat)),
-  feature=all.features.mat[, "log2.n"],
-  target.mat)
+  feature=feature.dt$log2.n,
+  target.dt)
 
 ## The log2.n feature is log(log(n = number of data points to segment)).
 
@@ -46,11 +42,11 @@ train.dt <- data.table(
 BIC.df <- data.frame(slope=1, intercept=0, model.name="BIC")
 train.dt[, pred.log.lambda := feature ] #for the BIC
 train.dt$model.name <- "BIC"
-train.dt[, residual := targetIntervalResidual(cbind(min.L, max.L), pred.log.lambda)]
+train.dt[, residual := targetIntervalResidual(cbind(min.log.lambda, max.log.lambda), pred.log.lambda)]
 
 possible <- train.dt[, list(
-  positive=sum(-Inf < min.L),
-  negative=sum(max.L < Inf)
+  positive=sum(-Inf < min.log.lambda),
+  negative=sum(max.log.lambda < Inf)
   )]
 
 total.BIC <- train.dt[, list(
@@ -86,44 +82,8 @@ gg <- ggplot()+
                linetype="dotted",
                data=train.dt)+
   geom_abline(aes(slope=slope, intercept=intercept, color=model.name), data=BIC.df, size=1)+
-  geom_point(aes(feature, ifelse(is.finite(min.L), min.L, NA), fill="min"), data=train.dt, shape=21)+
-  geom_point(aes(feature, ifelse(is.finite(max.L), max.L, NA), fill="max"), data=train.dt, shape=21)+
-  scale_fill_manual("limit", values=c(min="black", max="white"))+
-  scale_color_manual(values=c(BIC="red", learned="deepskyblue"))+
-  scale_x_continuous("feature = log(log(n = number of data points to segment))")+
-  scale_y_continuous("<-- more changes     log(penalty)     less changes -->")
-print(gg)
-
-
-gg <- ggplot()+
-  geom_text(aes(
-    1.4, 6, color=model.name,
-    label=sprintf(
-      "total too high = %.1f (%d intervals / %d possible)",
-      total.residual, intervals, possible$negative)),
-            data=total.BIC[sign.residual==1, ],
-            hjust=0)+
-  geom_text(aes(
-    1.4, 5.5, color=model.name,
-    label=sprintf("%d intervals correctly predicted", intervals)),
-            data=total.BIC[sign.residual==0, ],
-            hjust=0)+
-  geom_text(aes(
-    1.4, 5, color=model.name,
-    label=sprintf(
-      "total too low = %.1f (%d intervals / %d possible)",
-      total.residual, intervals, possible$positive)),
-            data=total.BIC[sign.residual==-1, ],
-            hjust=0)+
-  geom_segment(aes(
-    feature, pred.log.lambda, xend=feature, color=model.name,
-    yend=ifelse(residual==0, NA, pred.log.lambda-residual)),
-               size=1,
-               linetype="dotted",
-               data=train.dt)+
-  geom_abline(aes(slope=slope, intercept=intercept, color=model.name), data=BIC.df, size=1)+
-  geom_point(aes(feature, ifelse(is.finite(min.L), min.L, NA), fill="min"), data=train.dt, shape=21)+
-  geom_point(aes(feature, ifelse(is.finite(max.L), max.L, NA), fill="max"), data=train.dt, shape=21)+
+  geom_point(aes(feature, ifelse(is.finite(min.log.lambda), min.log.lambda, NA), fill="min"), data=train.dt, shape=21)+
+  geom_point(aes(feature, ifelse(is.finite(max.log.lambda), max.log.lambda, NA), fill="max"), data=train.dt, shape=21)+
   scale_fill_manual("limit", values=c(min="black", max="white"))+
   scale_color_manual(values=c(BIC="red", learned="deepskyblue"))+
   scale_x_continuous("feature = log(log(n = number of data points to segment))")+
@@ -131,17 +91,17 @@ gg <- ggplot()+
 print(gg)
 
 ## Bug?
-## fit <- survreg(Surv(min.L, max.L, type="interval2") ~ feature, train.dt, dist="gaussian")
+## fit <- survreg(Surv(min.log.lambda, max.log.lambda, type="interval2") ~ feature, train.dt, dist="gaussian")
 ## Error in coxph.wtest(t(x) %*% (wt * x), c((wt * eta + weights * deriv$dg) %*%  : 
 ##   NA/NaN/Inf in foreign function call (arg 3)
 
 fit <- with(train.dt, {
   IntervalRegressionUnregularized(
-    cbind(feature), cbind(min.L, max.L))
+    cbind(feature), cbind(min.log.lambda, max.log.lambda))
 })
 pred.dt <- data.table(train.dt)
 pred.dt[, pred.log.lambda := fit$predict(cbind(feature))]
-pred.dt[, residual := targetIntervalResidual(cbind(min.L, max.L), pred.log.lambda)]
+pred.dt[, residual := targetIntervalResidual(cbind(min.log.lambda, max.log.lambda), pred.log.lambda)]
 pred.dt$model.name <- "learned"
 total.learned <- pred.dt[, list(
   total.residual=sum(residual),
@@ -185,8 +145,6 @@ gg+
   geom_line(aes(
     feature, pred.log.lambda, color=model.name), data=pred.dt)
 
-## TODO: linked regression
-
 model.list <- list(
   BIC=train.dt,
   learned=pred.dt)
@@ -206,6 +164,23 @@ roc <- do.call(rbind, roc.list)
 auc <- do.call(rbind, auc.list)
 pred.dot <- do.call(rbind, pred.dot.list)
 auc.polygon <- do.call(rbind, auc.polygon.list)
+
+## Zoomed ROC curves.
+auc$TPR <- c(0.85, 0.9)
+auc$FPR <- 0.2
+ggplot()+
+  theme_bw()+
+  geom_text(aes(FPR, TPR, color=model.name, label=sprintf("AUC = %.4f", auc)),
+            vjust=0,
+            data=auc)+
+  geom_path(aes(FPR, TPR, color=model.name, group=model.name),
+            data=roc)+
+  scale_fill_manual(values=c(default="grey", min.error="black"))+
+  geom_point(aes(FPR, TPR, color=model.name, fill=threshold),
+             data=pred.dot,
+             size=3,
+             shape=21)+
+  coord_equal(xlim=c(0, 0.25), ylim=c(0.75, 1))
 
 roc[, mid.thresh := (min.thresh+max.thresh)/2]
 pred.dot[, mid.thresh := (min.thresh+max.thresh)/2]
@@ -244,13 +219,27 @@ some.thresh[, slope := ifelse(model.name=="BIC", 1, learned.slope)]
 some.thresh[, intercept := {
   ifelse(model.name=="BIC", 0, learned.intercept)+mid.thresh
 }]
+ggplot()+
+  theme_bw()+
+  geom_text(aes(FPR, TPR, label=sprintf("AUC = %.4f", auc)),
+            vjust=0,
+            data=auc)+
+  geom_path(aes(FPR, TPR, 
+                color=dist.from.zero, group=model.name),
+            data=roc)+
+  scale_fill_manual(values=c(default="grey", min.error="black"))+
+  geom_point(aes(FPR, TPR, fill=threshold),
+             data=pred.dot,
+             size=3,
+             shape=21)+
+  scale_color_gradient(low="black", high="red")
 
 both.pred <- rbind(train.dt, pred.dt)
 setkey(both.pred, model.name)
 setkey(some.thresh, model.name)
 some.thresh.pred <- both.pred[some.thresh, allow.cartesian=TRUE]
 some.thresh.pred[, pred.log.lambda := slope * feature + intercept]
-some.thresh.pred[, residual := targetIntervalResidual(cbind(min.L, max.L), pred.log.lambda)]
+some.thresh.pred[, residual := targetIntervalResidual(cbind(min.log.lambda, max.log.lambda), pred.log.lambda)]
 total.thresh.pred <- some.thresh.pred[, list(
   total.residual=sum(residual),
   intervals=.N
@@ -258,8 +247,6 @@ total.thresh.pred <- some.thresh.pred[, list(
 total.thresh.pred
 residual.thresh.pred <- some.thresh.pred[residual!=0,]
 
-auc$TPR <- c(0.85, 0.9)
-auc$FPR <- 0.2
 bic.left <- 1.45
 bic.top <- 6.5
 bic.space <- 0.7
@@ -376,11 +363,11 @@ viz <- list(
         total.residual, intervals, possible$positive)),
               data=total.thresh.pred[sign.residual==-1 & model.name=="learned", ],
               hjust=0)+
-    geom_point(aes(feature, min.L, fill=limit),
-               data=data.table(limit="min", train.dt[is.finite(min.L),]),
+    geom_point(aes(feature, min.log.lambda, fill=limit),
+               data=data.table(limit="min", train.dt[is.finite(min.log.lambda),]),
                shape=21)+
-    geom_point(aes(feature, max.L, fill=limit),
-               data=data.table(limit="max", train.dt[is.finite(max.L),]),
+    geom_point(aes(feature, max.log.lambda, fill=limit),
+               data=data.table(limit="max", train.dt[is.finite(max.log.lambda),]),
                shape=21)+
     geom_abline(aes(slope=slope,
                     showSelected.variable=paste0(model.name, ".thresh"),
@@ -406,48 +393,5 @@ for(row.i in 1:nrow(pred.thresh.only)){
 }
 animint2dir(viz, "figure-regression-interactive")
 
-
-ggplot()+
-  theme_bw()+
-  geom_text(aes(FPR, TPR, color=model.name, label=sprintf("AUC = %.4f", auc)),
-            vjust=0,
-            data=auc)+
-  geom_path(aes(FPR, TPR, color=model.name, group=model.name),
-            data=roc)+
-  scale_fill_manual(values=c(default="grey", min.error="black"))+
-  geom_point(aes(FPR, TPR, color=model.name, fill=threshold),
-             data=pred.dot,
-             size=3,
-             shape=21)+
-  coord_equal(xlim=c(0, 0.25), ylim=c(0.75, 1))
-
-ggplot()+
-  theme_bw()+
-  geom_text(aes(FPR, TPR, color=model.name, label=sprintf("AUC = %.4f", auc)),
-            vjust=0,
-            data=auc)+
-  geom_path(aes(FPR, TPR, color=model.name, group=model.name),
-            data=roc)+
-  scale_fill_manual(values=c(default="grey", min.error="black"))+
-  geom_point(aes(FPR, TPR, color=model.name, fill=threshold),
-             data=pred.dot,
-             size=3,
-             shape=21)+
-  coord_equal(xlim=c(0, 0.25), ylim=c(0.75, 1))
-
-ggplot()+
-  theme_bw()+
-  geom_text(aes(FPR, TPR, label=sprintf("AUC = %.4f", auc)),
-            vjust=0,
-            data=auc)+
-  geom_path(aes(FPR, TPR, 
-                color=dist.from.zero, group=model.name),
-            data=roc)+
-  scale_fill_manual(values=c(default="grey", min.error="black"))+
-  geom_point(aes(FPR, TPR, fill=threshold),
-             data=pred.dot,
-             size=3,
-             shape=21)+
-  scale_color_gradient(low="black", high="red")
 
 
