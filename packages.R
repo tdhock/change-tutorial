@@ -1,6 +1,7 @@
 works_with_R("3.3.2",
              neuroblastoma="1.0",
              tikzDevice="0.10.1",
+             doParallel="1.0.6",
              cghseg="1.0.2",
              LambertW="0.6.4",
              microbenchmark="1.4.2.1",
@@ -15,4 +16,5 @@ works_with_R("3.3.2",
              "Rdatatable/data.table@7515fbe6c6f60114da72067db44fbe78ecdbd8fb")
 library(survival)
 library(penaltyLearning)
-
+library(doParallel)
+registerDoParallel()

@@ -40,6 +40,7 @@ ggplot()+
   theme(panel.margin=grid::unit(0, "lines"))+
   facet_grid(relapse.profile ~ chromosome, scales="free", space="free_x")+
   geom_tallrect(aes(xmin=min/1e6, xmax=max/1e6, fill=annotation),
+                color="grey",
                 data=labels)+
   scale_fill_manual("label", values=breakpoint.colors)+
   geom_point(aes(position/1e6, logratio),
@@ -50,7 +51,6 @@ ggplot()+
     breaks=c(100, 200))
 
 one.pro <- subset(neuroblastoma$profiles, profile.id==4 & chromosome==14)
-
 ggplot()+
   geom_point(aes(position/1e6, logratio),
              data=one.pro,
@@ -59,13 +59,12 @@ ggplot()+
 label <- function(annotation, min, max){
   data.table(annotation, min, max)
 }
-one.labels <- rbind(
+one.pro.labels <- rbind(
   label("1change", 70e6, 80e6),
   label("0changes", 20e6, 60e6))
-
 ggplot()+
   geom_tallrect(aes(xmin=min/1e6, xmax=max/1e6, fill=annotation),
-                data=one.labels)+
+                data=one.pro.labels)+
   scale_fill_manual("label", values=change.colors)+
   geom_point(aes(position/1e6, logratio),
              data=one.pro,

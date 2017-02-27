@@ -1,0 +1,113 @@
+Université de Montréal Biohackathon, 28 Feb 2017
+
+** Project
+
+Titre : Apprentissage artificiel pour la détection de changements dans
+les données de nombre de copie
+
+Resumé : La détection des changements est important pour faire un bon
+diagnostique dans les cancers tels que le neuroblastome, qui est
+fréquent chez les enfants. Le paquet R neuroblastoma contient le
+premier base de données avec annotations pour quantifier le taux
+d'erreur de détections de changements. Ces données contient 575
+profils de nombre de copie (neuroblastoma$profiles), chacun avec
+annotations sur un maximum de 6 chromosomes
+(neuroblastoma$annotations). Le taux de faux positif est calculé à
+partir des annotations normal (un région du génome qui ne contient pas
+de changement) et le taux de faux négatif est calculé à partir des
+annotations breakpoint (un région du génome qui contient au moins un
+changement). Le défi du biohackathon est de construire un algorithme
+d'apprentissage artificiel pour la détection de changements dans ces
+données. L'équipe gangant sera capable de réduire le taux d'erreur en
+6-échantillon validation croisée (par chromosome) du 2,2%, ce qui est
+l'état de l'art actuel.
+
+Paquet R : https://cran.r-project.org/web/packages/neuroblastoma/
+
+Référence :
+http://bmcbioinformatics.biomedcentral.com/articles/10.1186/1471-2105-14-164
+
+Tableau de taux d'erreur, qui affiche l'état de l'art actuel :
+http://members.cbio.mines-paristech.fr/~thocking/neuroblastoma/accuracy.html
+
+Quelques idées : l'état de l'art actuel est d'apprendre une fonction
+de pénalité pour prédire le nombre de changements dans un modèle de
+ségmentation de maximum de vraisemblance gaussienne, en utilisant un
+algorithme d'optimisation convexe (papier
+http://jmlr.org/proceedings/papers/v28/hocking13.html avec code
+https://github.com/tdhock/penaltyLearning). Du fait qu'il y a valeurs
+aberrantes dans les données, il se peut que la vraisemblance
+gaussienne n'est pas optimale. Un algorithme récent permet la
+détection des changements dans des bruits à valeurs aberrantes, et
+peut eventuellement reduire le taux d'erreur.
+
+Référence : https://arxiv.org/abs/1609.07363
+
+Code : https://github.com/guillemr/robust-fpop
+
+** English translation
+
+Title: Machine learning for detecting changepoints in copy number data
+
+Abstract: Changepoint detection is important when analyzing copy
+number data from cancers such as neuroblastoma, which is frequent in
+children. The R package neuroblastoma contains the first data set of
+copy number profiles that also contain labels, which are essential for
+machine learning. These data contain 575 copy number profiles
+(neuroblastoma$profiles), each with labels on up to 6 chromosomes
+(neuroblastoma$annotations). The false positive rate can be computed
+using the normal labels (a genomic region that contains no
+changepoints) and the false negative rate can be computed using the
+breakpoint labels (a genomic region that contains at least one
+changepoint). The challenge of the biohackathon is to create a machine
+learning algorithm for accurate changepoint detection in these
+data. The winning team will be able to reduce the error rate in 6-fold
+cross-validation (by chromosome) from 2.2%, which is the current
+state-of-the-art.
+
+R package: https://cran.r-project.org/web/packages/neuroblastoma/
+
+Paper:
+http://bmcbioinformatics.biomedcentral.com/articles/10.1186/1471-2105-14-164
+
+Table of error rates, which shows the current state-of-the-art:
+http://members.cbio.mines-paristech.fr/~thocking/neuroblastoma/accuracy.html
+
+Some ideas: the current state-of-the-art is to learn a penalty
+function that predicts the number of changepoints in a maximum
+likelihood Gaussian segmentation model, using a convex optimization
+algorithm (paper http://jmlr.org/proceedings/papers/v28/hocking13.html
+with code https://github.com/tdhock/penaltyLearning). Because there
+are outliers in these data, the Gaussian likelihood may not be
+optimal. A recently proposed algorithm can be used to compute the best
+changepoints using a non-Gaussian likelihood, which may be a better
+model for the outliers, and may reduce the changepoint detection error
+rate.
+
+Paper: https://arxiv.org/abs/1609.07363
+
+Code: https://github.com/guillemr/robust-fpop
+
+** Demo
+
+[[file:figure-neuroblastoma.R]] plots a subset of the neuroblastoma data
+set.
+
+[[file:Segmentor.models.R]] computes maximum Gaussian likelihood
+segmentation models for each labeled neuroblastoma data set.
+
+[[file:test.error.R]] assigns each labeled chromosome (1, 2, 3, 4, 11, 17)
+to a fold and then performs 6-fold cross-validation to compare
+breakpoint prediction accuracy of three models.
+
+[[file:figure-cv.R]] plots the accuracy in terms of two metrics
+(accuracy.percent is the percent incorrectly predicted labels, auc is
+the Area Under the Receiver Operating Characteristic Curve).
+
+Note: [[file:test.error.10fold.R]] can be used to re-do the 10-fold
+cross-validation experiment described in
+http://jmlr.org/proceedings/papers/v28/hocking13.html. The paper
+demonstrated that a supervised penalty learning algorithm can be used
+to increase accuracy in 10-fold cross-validation (simple random
+sampling). However, for this project you are request to do a 6-fold
+cross-validation on chromosomes, which is a more difficult problem!
