@@ -42,7 +42,8 @@ train.dt <- data.table(
 BIC.df <- data.frame(slope=1, intercept=0, model.name="BIC")
 train.dt[, pred.log.lambda := feature ] #for the BIC
 train.dt$model.name <- "BIC"
-train.dt[, residual := targetIntervalResidual(cbind(min.log.lambda, max.log.lambda), pred.log.lambda)]
+train.dt[, residual := targetIntervalResidual(
+  cbind(min.log.lambda, max.log.lambda), pred.log.lambda)]
 
 possible <- train.dt[, list(
   negative=sum(-Inf < min.log.lambda),
