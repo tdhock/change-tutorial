@@ -65,7 +65,7 @@ model.fun.list <- list(
       fold.vec=as.integer(test.fold.vec[is.train]),
       incorrect.labels.db=errors$model.errors,
       reg.type="min(mean)")
-  }, L1.reg.min.mean=function(){
+  }, L1.reg.mean.min=function(){
     IntervalRegressionCV(
       train.feature.mat, train.target.mat,
       fold.vec=as.integer(test.fold.vec[is.train]),

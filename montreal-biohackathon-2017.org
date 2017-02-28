@@ -93,6 +93,8 @@ Code: https://github.com/guillemr/robust-fpop
 [[file:figure-neuroblastoma.R]] plots a subset of the neuroblastoma data
 set.
 
+[[file:figure-neuroblastoma-labeled.png]]
+
 [[file:Segmentor.models.R]] computes maximum Gaussian likelihood
 segmentation models for each labeled neuroblastoma data set.
 
@@ -103,6 +105,8 @@ breakpoint prediction accuracy of three models.
 [[file:figure-cv.R]] plots the accuracy in terms of two metrics
 (accuracy.percent is the percent incorrectly predicted labels, auc is
 the Area Under the Receiver Operating Characteristic Curve).
+
+[[file:figure-cv.png]]
 
 Note: [[file:test.error.10fold.R]] can be used to re-do the 10-fold
 cross-validation experiment described in

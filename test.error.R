@@ -53,7 +53,22 @@ model.fun.list <- list(
   }, log.n=function(){
     IntervalRegressionUnregularized(
       train.feature.mat[, "log.n", drop=FALSE], train.target.mat)
+  }, log.s.log.d=function(){
+    IntervalRegressionUnregularized(
+      train.feature.mat[, c("log.hall", "log.n")], train.target.mat)
   })
+## Comment the following for loop if you don't want to fit the
+## multivariate models, which take a long time because of their
+## internal cross-validation loop.
+for(reg.type in c("1sd", "min(mean)", "mean(min)")){
+  model.fun.list[[paste0("L1.reg.", reg.type)]] <- eval(substitute(function(){
+    IntervalRegressionCV(
+      train.feature.mat, train.target.mat,
+      fold.vec=as.integer(test.fold.vec[is.train]),
+      incorrect.labels.db=errors$model.errors,
+      reg.type=REGTYPE)
+  }, list(REGTYPE=reg.type)))
+}
 
 set.seed(1)
 test.error.list <- list()
