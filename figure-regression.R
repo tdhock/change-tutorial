@@ -28,7 +28,9 @@ train.dt <- data.table(
 BIC.df <- data.frame(slope=1, intercept=0, model="BIC")
 train.dt[, pred.log.lambda := feature ] #for the BIC
 train.dt$model <- "BIC"
-train.dt[, residual := targetIntervalResidual(cbind(min.log.lambda, max.log.lambda), pred.log.lambda)]
+train.dt[, residual := targetIntervalResidual({
+  cbind(min.log.lambda, max.log.lambda)
+}, pred.log.lambda)]
 possible <- train.dt[, list(
   negative=sum(-Inf < min.log.lambda),
   positive=sum(max.log.lambda < Inf),
@@ -97,18 +99,13 @@ gg.BIC <- ggplot()+
   scale_y_continuous("<-- more changes     log(penalty)     less changes -->")
 print(gg.BIC)
 
-## Bug?
-## fit <- survreg(Surv(min.log.lambda, max.log.lambda, type="interval2") ~ feature, train.dt, dist="gaussian")
-## Error in coxph.wtest(t(x) %*% (wt * x), c((wt * eta + weights * deriv$dg) %*%  : 
-##   NA/NaN/Inf in foreign function call (arg 3)
-
-fit <- with(train.dt, {
-  IntervalRegressionUnregularized(
-    cbind(feature), cbind(min.log.lambda, max.log.lambda))
-})
 pred.dt <- data.table(train.dt)
-pred.dt[, pred.log.lambda := fit$predict(cbind(feature))]
-pred.dt[, residual := targetIntervalResidual(cbind(min.log.lambda, max.log.lambda), pred.log.lambda)]
+fit <- survreg(
+  Surv(min.log.lambda, max.log.lambda, type="interval2") ~ feature,
+  train.dt, dist="gaussian")
+pred.dt[, pred.log.lambda := predict(fit)]
+pred.dt[, residual := targetIntervalResidual(
+  cbind(min.log.lambda, max.log.lambda), pred.log.lambda)]
 pred.dt$model <- "learned"
 total.learned <- totalResiduals(pred.dt, 1.8, c(-4, -4.5, -5))
 total.learned

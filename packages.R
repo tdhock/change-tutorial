@@ -1,4 +1,4 @@
-works_with_R("3.3.2",
+works_with_R("3.3.3",
              neuroblastoma="1.0",
              tikzDevice="0.10.1",
              doParallel="1.0.6",
@@ -9,6 +9,10 @@ works_with_R("3.3.2",
              lpSolveAPI="5.5.2.0.9",
              quadmod="2013.8.23",
              geometry="0.3.6",
+             survival="2.41.0", #2.40.1 is included with R-3.3.3.
+### Survival can't be installed from github, because you need to run
+### "cd noweb; make fun" before building the package.
+             ##"therneau/survival@aace4b865fb4f1b295007159600df8debb7469fe",
              ##"tdhock/penaltyLearning@6cf2f21f84c8c4f8d7615a2af472bccd989daba6",
              "faizan-khan-iit/ggplot2@5fb99d0cece13239bbbc09c6b8a7da7f86ac58e2",
              "tdhock/animint@c0db9f34c525bec35c797ccdf8be9564b67c578c",

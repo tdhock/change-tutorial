@@ -51,22 +51,14 @@ possible <- train.dt[, list(
   total=.N
   )]
 
-## Bug?
-## fit <- survreg(Surv(min.log.lambda, max.log.lambda, type="interval2") ~ feature, train.dt, dist="gaussian")
-## Error in coxph.wtest(t(x) %*% (wt * x), c((wt * eta + weights * deriv$dg) %*%  : 
-##   NA/NaN/Inf in foreign function call (arg 3)
-
-fit <- with(train.dt, {
-  IntervalRegressionUnregularized(
-    cbind(feature), cbind(min.log.lambda, max.log.lambda))
-})
+fit <- survreg(
+  Surv(min.log.lambda, max.log.lambda, type="interval2") ~ feature,
+  train.dt, dist="gaussian")
 pred.dt <- data.table(train.dt)
-pred.dt[, pred.log.lambda := fit$predict(cbind(feature))]
-pred.dt[, residual := targetIntervalResidual(cbind(min.log.lambda, max.log.lambda), pred.log.lambda)]
+pred.dt[, pred.log.lambda := predict(fit)]
+pred.dt[, residual := targetIntervalResidual(
+  cbind(min.log.lambda, max.log.lambda), pred.log.lambda)]
 pred.dt$model.name <- "learned"
-
-learned.slope <- with(fit, param.mat["feature",]/sd.vec)
-learned.intercept <- fit$param.mat["(Intercept)",]-learned.slope*fit$mean.vec
 
 model.list <- list(
   BIC=train.dt,
@@ -78,7 +70,8 @@ auc.polygon.list <- list()
 for(model.name in names(model.list)){
   model.dt <- model.list[[model.name]]
   feature.result <- ROChange(errors$model.errors, model.dt, c("profile.id", "chromosome"))
-  pred.dot.list[[model.name]] <- data.table(model.name, feature.result$thresholds)
+  pred.dot.list[[model.name]] <- data.table(
+    model.name, feature.result$thresholds[threshold=="predicted",])
   roc.list[[model.name]] <- data.table(model.name, feature.result$roc)
   auc.list[[model.name]] <- data.table(model.name, auc=feature.result$auc)
   auc.polygon.list[[model.name]] <- data.table(model.name, feature.result$auc.polygon)
@@ -138,9 +131,9 @@ some.thresh[, next.thresh := {
 some.thresh[, stopifnot(
   identical(prev.thresh[-1], next.thresh[-.N])
   ), by=model.name]
-some.thresh[, slope := ifelse(model.name=="BIC", 1, learned.slope)]
+some.thresh[, slope := ifelse(model.name=="BIC", 1, coef(fit)[["feature"]])]
 some.thresh[, intercept := {
-  ifelse(model.name=="BIC", 0, learned.intercept)+mid.thresh
+  ifelse(model.name=="BIC", 0, coef(fit)[["(Intercept)"]])+mid.thresh
 }]
 ggplot()+
   theme_bw()+
@@ -164,7 +157,7 @@ some.thresh.pred <- both.pred[some.thresh, allow.cartesian=TRUE]
 some.thresh.pred[, pred.log.lambda := slope * feature + intercept]
 some.thresh.pred[, residual := targetIntervalResidual(
   cbind(min.log.lambda, max.log.lambda), pred.log.lambda)]
-total.thresh.pred <- some.thresh.pred[, list(
+total.thresh.pred <- unique(some.thresh.pred)[, list(
   total.residual=sum(residual),
   intervals=.N
 ), by=.(model.name, sign.residual=sign(residual), mid.thresh)]

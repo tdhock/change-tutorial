@@ -34,11 +34,12 @@ model.fun.list <- list(
   }, learned=function(train.dt){
     target.mat <- train.dt[, cbind(min.log.lambda, max.log.lambda)]
     feature.mat <- train.dt[, cbind(feature)]
-    fit <- IntervalRegressionUnregularized(feature.mat, target.mat)
-    slope <- with(fit, param.mat["feature",]/sd.vec)
+    fit <- survreg(
+      Surv(min.log.lambda, max.log.lambda, type="interval2") ~ feature,
+      train.dt, dist="gaussian")
     data.table(
-      slope,
-      intercept=fit$param.mat["(Intercept)",]-slope*fit$mean.vec
+      slope=coef(fit)[["feature"]],
+      intercept=coef(fit)[["(Intercept)"]]
       )
   })
 model.label.vec <- c(
