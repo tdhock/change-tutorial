@@ -55,7 +55,7 @@ works_with_R(
   libcoin="0.9.1",
   mlt="0.1.3",
   trtf="0.1.1",#R CMD INSTALL ctm/pkg/trtf/
-  "tdhock/penaltyLearning@82b16a3c204713818cc23517af85b3a92516af87",
+  "tdhock/penaltyLearning@2e9ad040a97e2baf4623549f114d3817b10e5fbf",
   survival="2.41.2")
 
 data(neuroblastomaProcessed, package="penaltyLearning")
