@@ -1,5 +1,8 @@
 source("packages.R")
 
+## TODO: compare regression problem if we compute target intervals
+## using Segmentor likelihood or square loss.
+
 data(neuroblastoma, package="neuroblastoma")
 load("Segmentor.models.RData")
 selection <-

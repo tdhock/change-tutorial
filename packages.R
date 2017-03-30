@@ -9,16 +9,12 @@ works_with_R("3.3.3",
              lpSolveAPI="5.5.2.0.9",
              quadmod="2013.8.23",
              geometry="0.3.6",
-             survival="2.41.0", #2.40.1 is included with R-3.3.3.
-### Survival can't be installed from github, because you need to run
-### "cd noweb; make fun" before building the package.
-             ##"therneau/survival@aace4b865fb4f1b295007159600df8debb7469fe",
+             data.table="1.10.4",
+             survival="2.41.2",
              ##"tdhock/penaltyLearning@6cf2f21f84c8c4f8d7615a2af472bccd989daba6",
              "faizan-khan-iit/ggplot2@5fb99d0cece13239bbbc09c6b8a7da7f86ac58e2",
              "tdhock/animint@c0db9f34c525bec35c797ccdf8be9564b67c578c",
-             "tdhock/directlabels@dcf34672129bf99a79ddfaceaef73236ae0f696d",
-             "Rdatatable/data.table@7515fbe6c6f60114da72067db44fbe78ecdbd8fb")
-library(survival)
+             "tdhock/directlabels@dcf34672129bf99a79ddfaceaef73236ae0f696d")
 library(penaltyLearning)
 library(doParallel)
 registerDoParallel()
