@@ -2,7 +2,94 @@
 
 CRAN submission because penaltyLearning has compiled code:
 - remove iregnet example.
-- test-peaks.R which needs coseg, PeakSegDP, and PeakError.
+- remove test-peaks.R which needs coseg, PeakSegDP, and PeakError.
+- remove the following long examples, or put in if(interactive())
+#+BEGIN_EXAMPLE
+Examples with CPU or elapsed time > 5s
+                                 user system  elapsed
+IntervalRegressionCV          623.212  3.028 1256.107
+modelSelectionR               106.232 70.304  180.940
+IntervalRegressionRegularized  48.400  1.248   50.836
+ROChange                       20.604  0.592   21.657
+labelError                      9.204  0.460    9.754
+largestContinuousMinimumC       6.540  0.496    7.356
+targetIntervals                 6.488  0.468    7.198
+largestContinuousMinimumR       6.204  0.440    6.803
+modelSelectionC                 5.720  0.568    6.487
+featureMatrix                   5.064  0.792    5.988
+#+END_EXAMPLE
+- fix these global variable issues
+#+BEGIN_EXAMPLE
+* checking R code for possible problems ... NOTE
+IntervalRegressionCV: no visible binding for global variable
+  ‘validation.fold’
+IntervalRegressionCV: no visible binding for global variable
+  ‘negative.auc’
+IntervalRegressionCV: no visible binding for global variable
+  ‘threshold’
+IntervalRegressionCV: no visible binding for global variable
+  ‘incorrect.labels’
+IntervalRegressionCV: no visible binding for global variable ‘variable’
+IntervalRegressionCV: no visible binding for global variable ‘value’
+IntervalRegressionCV: no visible global function definition for ‘.’
+IntervalRegressionCV: no visible binding for global variable
+  ‘regularization’
+IntervalRegressionCV: no visible binding for global variable ‘folds’
+IntervalRegressionCV: no visible binding for global variable ‘status’
+IntervalRegressionCV: no visible binding for global variable ‘type’
+IntervalRegressionCV: no visible binding for global variable ‘vjust’
+IntervalRegressionRegularized: no visible binding for global variable
+  ‘residual’
+IntervalRegressionRegularized: no visible binding for global variable
+  ‘limit’
+IntervalRegressionRegularized: no visible binding for global variable
+  ‘normalized.weight’
+IntervalRegressionRegularized: no visible binding for global variable
+  ‘variable’
+ROChange: no visible binding for global variable ‘possible.fp’
+ROChange: no visible binding for global variable ‘possible.fn’
+ROChange: no visible binding for global variable ‘min.log.lambda’
+ROChange: no visible binding for global variable ‘fp’
+ROChange: no visible binding for global variable ‘fn’
+ROChange: no visible binding for global variable ‘thresh’
+ROChange: no visible binding for global variable ‘log.lambda’
+ROChange: no visible binding for global variable ‘pred.log.lambda’
+ROChange: no visible binding for global variable ‘errors’
+ROChange: no visible binding for global variable ‘FPR’
+ROChange: no visible binding for global variable ‘tp’
+ROChange: no visible binding for global variable ‘TPR’
+ROChange: no visible binding for global variable ‘error.percent’
+ROChange: no visible binding for global variable ‘min.thresh’
+ROChange: no visible binding for global variable ‘max.thresh’
+labelError: no visible binding for global variable ‘weight’
+labelError: no visible binding for global variable ‘annotation’
+labelError: no visible binding for global variable ‘fp’
+labelError: no visible binding for global variable ‘max.changes’
+labelError: no visible binding for global variable ‘pred.changes’
+labelError: no visible binding for global variable ‘fn’
+labelError: no visible binding for global variable ‘min.changes’
+labelError: no visible binding for global variable ‘status’
+labelError: no visible binding for global variable ‘possible.fp’
+labelError: no visible binding for global variable ‘possible.fn’
+targetIntervalROC: no visible binding for global variable ‘errors’
+targetIntervalROC: no visible binding for global variable ‘fp’
+targetIntervalROC: no visible binding for global variable ‘fn’
+targetIntervalROC: no visible binding for global variable ‘possible.fp’
+targetIntervalROC: no visible binding for global variable ‘possible.fn’
+targetIntervals: no visible binding for global variable
+  ‘min.log.lambda’
+targetIntervals: no visible binding for global variable ‘errors’
+targetIntervals: no visible binding for global variable
+  ‘max.log.lambda’
+Undefined global functions or variables:
+  . FPR TPR annotation error.percent errors fn folds fp
+  incorrect.labels limit log.lambda max.changes max.log.lambda
+  max.thresh min.changes min.log.lambda min.thresh negative.auc
+  normalized.weight possible.fn possible.fp pred.changes
+  pred.log.lambda regularization residual status thresh threshold tp
+  type validation.fold value variable vjust weight
+* checking Rd files ... OK
+#+END_EXAMPLE
 
 Check out coarseDataTools::EMforCFR, adapEnetClass, icenReg, and
 non-linear models.
