@@ -1,0 +1,239 @@
+---
+title: "Introduction to supervised changepoint detection"
+author: Toby Dylan Hocking, McGill University, Montreal, Canada
+output: html_document
+---
+
+# What is the difference between unsupervised and supervised changepoint detection?
+
+## Neuroblastoma data set
+
+We will use the neuroblastoma data set to explore supervised
+changepoint detection.
+
+```{r neuroblastoma}
+data(neuroblastoma, package="neuroblastoma")
+str(neuroblastoma)
+lapply(neuroblastoma, head, 10)
+```
+
+The neuroblastoma data set consists of two data.frames:
+- profiles contains the noisy data (logratio), which is approximate
+  DNA copy number (measured at chromosome, position), for a particular
+  patient (profile.id). Every unique combination of (profile.id,
+  chromosome) defines a separate multiple changepoint detection
+  problem.
+- annotations contains the labels, which indicate presence
+  (breakpoint) or absence (normal) of changepoints in specific regions
+  (profile.id, chromosome, min, max) of the data.
+  
+These data come from children who were treated at the Institut Curie
+(Paris, France). For six children we also have follow-up data on
+whether they recovered (ok) or had a relapse, several years after
+treatment:
+
+```{r clinical}
+followup <- data.frame(
+  profile.id=c(10L, 8L, 4L, 6L, 11L, 1L),
+  status=c("ok", "relapse", "relapse", "ok", "ok", "relapse"))
+followup
+```
+  
+## Unsupervised: no labels, model selection via theory
+
+When there are no labels, the input for a changepoint analysis just
+uses the noisy DNA copy number data in
+`neuroblastoma$profiles$logratio`. We begin by selecting the profiles
+of the six patients for which we have follow-up data.
+
+```{r six}
+rownames(followup) <- followup$profile.id
+followup$status.profile <- with(followup, paste(status, profile.id))
+some.ids <- rownames(followup)
+someProfiles <- function(all.profiles){
+  some <- subset(all.profiles, profile.id %in% some.ids)
+  status.profile <- followup[paste(some$profile.id), "status.profile"]
+  some$status.profile <- ifelse(
+    is.na(status.profile), some$profile.id, status.profile)
+  some
+}
+six.profiles <- someProfiles(neuroblastoma$profiles)
+```
+
+For these six patients, the total number of separate changepoint
+detection problems is 24 chromosomes x 6 patients = 144 problems. We
+plot each problem below in a separate facet (panel).
+
+```{r plotProfiles, fig.width=10}
+library(ggplot2)
+gg.unsupervised <- ggplot()+
+  ggtitle("unsupervised changepoint detection = only noisy data sequences")+
+  theme(
+    panel.margin=grid::unit(0, "lines"),
+    panel.border=element_rect(fill=NA, color="grey50")
+  )+
+  facet_grid(status.profile ~ chromosome, scales="free", space="free_x")+
+  geom_point(aes(position/1e6, logratio),
+             data=six.profiles,
+             shape=1)+
+  scale_x_continuous(
+    "position on chromosome (mega bases)",
+    breaks=c(100, 200))+
+  scale_y_continuous(
+    "logratio (approximate DNA copy number)",
+    limits=c(-1,1)*1.1)
+print(gg.unsupervised)
+```
+
+Note the facet titles on the right:
+
+* The top three profiles are "ok" because those children
+  completely recovered.
+* The bottom three profiles are "relapse" because the
+  neuroblastoma cancer came back, and required another treatment at
+  the hospital.
+
+**Question:** can you visually identify any differences between the
+two types of profiles?
+
+How to choose the number of changepoints? In the unsupervised setting,
+our only option is to use theoretical/statistical arguments, which
+give information criteria such as AIC (penalty=2) or BIC/SIC
+(penalty=log n). More on this later.
+
+## Supervised: learn a penalty function with minimal incorrect labels
+
+In supervised changepoint detection, there are labels which indicate
+presence and absence of changepoints in particular data subsets. For
+the same set of 6 profiles, we superimpose the labels in the plot
+below.
+
+```{r plotLabels, fig.width=10}
+ann.colors <- c(
+  breakpoint="violet",
+  normal="orange")
+six.labels <- someProfiles(neuroblastoma$annotations)
+gg.supervised <- gg.unsupervised+
+  ggtitle(paste(
+    "supervised changepoint detection = data + labels",
+    "that indicate specific regions with or without changepoints"))+
+  penaltyLearning::geom_tallrect(aes(
+    xmin=min/1e6, xmax=max/1e6, fill=annotation),
+    alpha=0.5,
+    data=six.labels)+
+  scale_fill_manual("label", values=penaltyLearning::change.colors)+
+  theme(legend.position="bottom")
+print(gg.supervised)
+```
+  
+As we will see later in the tutorial, these labels can be used for
+choosing the best model and parameters. The main idea is that the
+changepoint model should be consistent with the labels:
+
+* Every breakpoint/positive label is a region where the model should
+  predict at least one changepoint. If the model predicts no
+  changepoints in a region with a breakpoint label, that is considered
+  a false negative.
+* Every normal/negative label is a region where the model should
+  predict no changepoints. If the model predicts one or more
+  changepoints in a region with a normal label, that is considered a
+  false positive.
+* The overall goal is find a changepoint model that minimizes the
+  number of incorrectly predicted labels, which is defined as the sum
+  of false positives and false negatives.
+
+**Exercise:** plot data and labels for a different set of
+profiles. Hint: you can just assign a new value to `some.ids`, then
+re-run the code above.
+
+Labels can be created using prior knowledge or visual inspection.
+
+**Exercise:** create a set of labels via visual inspection for one
+un-labeled data sequence in the neuroblastoma data set. Begin by
+plotting one data set by itself so you can see the details of the
+signal and noise
+
+```{r zoom}
+zoom.profile <- 4 #Exercise: change this value!
+zoom.chromosome <- 14 #Exercise: change this value!
+zoom.pro <- subset(
+  neuroblastoma$profiles,
+  profile.id==zoom.profile & chromosome==zoom.chromosome)
+zoom.gg <- ggplot()+
+  geom_point(aes(position/1e6, logratio),
+             data=zoom.pro,
+             shape=1)
+print(zoom.gg)
+```
+
+Then add some new labels by creating a `data.frame` in R that encodes
+where you saw regions with and without changepoints. Hints:
+
+* in the neuroblastoma data set there is only one label per data
+  sequence, but you can add as many as you want. Try adding two labels
+  to the same data sequence.
+* in addition to breakpoint/normal labels, you can use the "1change"
+  label to indicate a region that should have exactly 1 changepoint (2
+  or more implies a false positive, 0 implies a false negative).
+* it will simplify the code to use a helper function as below:
+
+```{r manual-label-fun}
+label <- function(min, max, annotation){
+  data.frame(min, max, annotation)
+}
+zoom.labels <- rbind(
+  label(70e6, 80e6, "1change"),
+  label(20e6, 60e6, "0changes"))
+zoom.gg+
+  penaltyLearning::geom_tallrect(aes(
+    xmin=min/1e6, xmax=max/1e6, fill=annotation),
+    alpha=0.5,
+    data=zoom.labels)+
+  scale_fill_manual("label", values=penaltyLearning::change.colors)  
+```
+
+# Computing the number of incorrect labels
+
+* For a given labeled segmentation problem, compute optimal Gaussian
+  changepoint models for 1 to 10 segments (CRAN package
+  Segmentor3IsBack).
+* Compute number of incorrect labels for each model. 
+* Choose the number of segments by minimizing the number of incorrect
+  labels.
+* Compare supervised versus unsupervised changepoint detection: many
+  versus one data set, quantitative versus qualitative
+  evaluation.
+* Exercise: perform the same analysis on the segmentation problem that
+  you labeled in the last section. Which models are optimal? (in terms
+  of number of incorrect labels)
+
+# Supervised penalty learning
+
+* Compute the target interval of penalty values that select changepoint
+  models with minimal incorrect labels. 
+* Compute a feature vector for each segmentation problem, and a
+  feature matrix for each labeled set of related segmentation
+  problems.
+* Learn an affine function f(feature vector)=log(penalty).
+* Exercise: to learn the coefficients of the BIC penalty, what feature
+  vector should be used?
+* Un-regularized interval regression (survival package). Learns
+  weights for a given set of features, but may overfit if
+  non-relevant features are used.
+* Elastic net regularized interval regression (anujkhare/iregnet
+  package on GitHub). Simultaneously learns weights and performs
+  feature selection. Avoids overfitting by setting some feature
+  weights to zero.
+
+# Cross-validation experiments
+
+* K-fold cross-validation can be used to compare prediction accuracy
+  of supervised and unsupervised changepoint detection.
+* Compute test error and ROC curves for unsupervised and supervised
+  penalty functions: BIC, 1 feature un-regularized, multi-feature
+  un-regularized, multi-feature regularized. Which penalty function is
+  most accurate?
+* Exercise: perform cross-validation to compare Gaussian and Logistic
+  models for log(penalty) values. Which distribution results in more
+  accurate penalty functions?
+ 

@@ -1,3 +1,5 @@
+Supervised.html: Supervised.Rmd
+	Rscript -e 'rmarkdown::render("Supervised.Rmd")'
 figure-cv.png: figure-cv.R test.error.RData
 	R --no-save < $<
 test.error.RData: test.error.R Segmentor.models.RData

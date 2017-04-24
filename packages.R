@@ -1,20 +1,11 @@
 works_with_R("3.3.3",
              neuroblastoma="1.0",
-             tikzDevice="0.10.1",
              doParallel="1.0.6",
-             cghseg="1.0.2",
-             LambertW="0.6.4",
-             microbenchmark="1.4.2.1",
              Segmentor3IsBack="2.0",
-             lpSolveAPI="5.5.2.0.9",
-             quadmod="2013.8.23",
-             geometry="0.3.6",
              data.table="1.10.4",
              survival="2.41.2",
-             ##"tdhock/penaltyLearning@6cf2f21f84c8c4f8d7615a2af472bccd989daba6",
+             "tdhock/penaltyLearning@f02bcf310268cd66a4cc3d3da5b3b2c6dd2e36e4",
              "faizan-khan-iit/ggplot2@5fb99d0cece13239bbbc09c6b8a7da7f86ac58e2",
              "tdhock/animint@c0db9f34c525bec35c797ccdf8be9564b67c578c",
              "tdhock/directlabels@dcf34672129bf99a79ddfaceaef73236ae0f696d")
-library(penaltyLearning)
-library(doParallel)
 registerDoParallel()

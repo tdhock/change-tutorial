@@ -1,2 +1,11 @@
 *~
 .Rhistory
+.httr-oauth
+figure
+library
+*.RData
+*.html
+*.md
+*.pdf
+figure-*/*
+*_files/*
