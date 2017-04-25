@@ -1,7 +1,10 @@
 ---
 title: "Introduction to supervised changepoint detection"
 author: Toby Dylan Hocking, McGill University, Montreal, Canada
-output: html_document
+output: 
+  html_document:
+    toc: true
+    toc_depth: 2
 ---
 
 # What is the difference between unsupervised and supervised changepoint detection?
@@ -12,18 +15,24 @@ We will use the neuroblastoma data set to explore supervised
 changepoint detection.
 
 ```{r neuroblastoma}
+options(width=100)
 data(neuroblastoma, package="neuroblastoma")
 str(neuroblastoma)
 lapply(neuroblastoma, head, 10)
 ```
 
 The neuroblastoma data set consists of two data.frames:
-- profiles contains the noisy data (logratio), which is approximate
+
+* profiles contains the noisy data (logratio), which is approximate
   DNA copy number (measured at chromosome, position), for a particular
   patient (profile.id). Every unique combination of (profile.id,
   chromosome) defines a separate multiple changepoint detection
-  problem.
-- annotations contains the labels, which indicate presence
+  problem. The logratio measures how many copies of each part of the
+  human genome are present in the patient's tumor. Normally there are
+  two copies of each chromosome (logratio=0), but in cancer samples
+  there can be gains and losses of specific regions or entire
+  chromosomes.
+* annotations contains the labels, which indicate presence
   (breakpoint) or absence (normal) of changepoints in specific regions
   (profile.id, chromosome, min, max) of the data.
   
@@ -62,7 +71,7 @@ six.profiles <- someProfiles(neuroblastoma$profiles)
 
 For these six patients, the total number of separate changepoint
 detection problems is 24 chromosomes x 6 patients = 144 problems. We
-plot each problem below in a separate facet (panel).
+plot each problem below in a separate facet (panel). 
 
 ```{r plotProfiles, fig.width=10}
 library(ggplot2)
@@ -94,7 +103,7 @@ Note the facet titles on the right:
   the hospital.
 
 **Question:** can you visually identify any differences between the
-two types of profiles?
+"ok" and "relapse" profiles?
 
 How to choose the number of changepoints? In the unsupervised setting,
 our only option is to use theoretical/statistical arguments, which
@@ -109,9 +118,6 @@ the same set of 6 profiles, we superimpose the labels in the plot
 below.
 
 ```{r plotLabels, fig.width=10}
-ann.colors <- c(
-  breakpoint="violet",
-  normal="orange")
 six.labels <- someProfiles(neuroblastoma$annotations)
 gg.supervised <- gg.unsupervised+
   ggtitle(paste(
@@ -125,8 +131,17 @@ gg.supervised <- gg.unsupervised+
   theme(legend.position="bottom")
 print(gg.supervised)
 ```
+
+It is clear from this plot that the neuroblastoma data satisfy the two
+criteria which are necessary for a supervised changepoint analysis:
+
+* The data consist of **several sequences** with similar signal/noise
+  patterns, which are treated as separate changepoint detection
+  problems.
+* Some data sequences have **labels** which indicate specific regions
+  where the model should predict presence or absence of changepoints.
   
-As we will see later in the tutorial, these labels can be used for
+As we will see later in the tutorial, the labels can be used for
 choosing the best model and parameters. The main idea is that the
 changepoint model should be consistent with the labels:
 
@@ -143,14 +158,17 @@ changepoint model should be consistent with the labels:
   of false positives and false negatives.
 
 **Exercise:** plot data and labels for a different set of
-profiles. Hint: you can just assign a new value to `some.ids`, then
-re-run the code above.
+profiles. Hint: assign a new value to `some.ids`, then re-run the code
+above.
 
-Labels can be created using prior knowledge or visual inspection.
+## Creating labels via visual inspection
+
+Labels can be created using prior knowledge or visual inspection. In
+this section we explain how to create labels via visual inspection.
 
 **Exercise:** create a set of labels via visual inspection for one
 un-labeled data sequence in the neuroblastoma data set. Begin by
-plotting one data set by itself so you can see the details of the
+plotting one data set by itself to see the details of the
 signal and noise
 
 ```{r zoom}
@@ -162,7 +180,9 @@ zoom.pro <- subset(
 zoom.gg <- ggplot()+
   geom_point(aes(position/1e6, logratio),
              data=zoom.pro,
-             shape=1)
+             shape=1)+
+  scale_y_continuous(
+    "logratio (approximate DNA copy number)")
 print(zoom.gg)
 ```
 
@@ -179,53 +199,411 @@ where you saw regions with and without changepoints. Hints:
 
 ```{r manual-label-fun}
 label <- function(min, max, annotation){
-  data.frame(min, max, annotation)
+  data.frame(
+    profile.id=zoom.profile,
+    chromosome=zoom.chromosome,
+    min, max, annotation)
 }
 zoom.labels <- rbind(
   label(70e6, 80e6, "1change"),
-  label(20e6, 60e6, "0changes"))
-zoom.gg+
+  label(20e6, 60e6, "normal"))
+zoom.gg.lab <- zoom.gg+
   penaltyLearning::geom_tallrect(aes(
     xmin=min/1e6, xmax=max/1e6, fill=annotation),
     alpha=0.5,
+    color=NA,
     data=zoom.labels)+
-  scale_fill_manual("label", values=penaltyLearning::change.colors)  
+  scale_fill_manual("label", values=penaltyLearning::change.colors)
+print(zoom.gg.lab)
 ```
 
-# Computing the number of incorrect labels
+To simplify the process of labeling via visual inspection, I recommend using
+a GUI such as
+[annotate_regions.py](https://pypi.python.org/pypi/annotate_regions/1.0)
+or [SegAnnDB](https://github.com/tdhock/SegAnnDB).
 
-* For a given labeled segmentation problem, compute optimal Gaussian
-  changepoint models for 1 to 10 segments (CRAN package
-  Segmentor3IsBack).
-* Compute number of incorrect labels for each model. 
-* Choose the number of segments by minimizing the number of incorrect
-  labels.
-* Compare supervised versus unsupervised changepoint detection: many
-  versus one data set, quantitative versus qualitative
-  evaluation.
-* Exercise: perform the same analysis on the segmentation problem that
-  you labeled in the last section. Which models are optimal? (in terms
-  of number of incorrect labels)
+# A typical supervised changepoint analysis
 
-# Supervised penalty learning
+In this section we explain how to perform a supervised changepoint
+analysis on a labeled data set.
 
-* Compute the target interval of penalty values that select changepoint
-  models with minimal incorrect labels. 
+## Overview of supervised changepoint computations
+
+A typical supervised changepoint analysis consists of the
+following computations:
+
+* [Changepoints and model selection](#changepoints-and-model-selection).
+  For each of several labeled segmentation problems (data sequences
+  that are separate but have a similar signal/noise pattern), use your
+  favorite changepoint detection package to compute a sequence of
+  models of increasing complexity (say from 0 to 20 changepoints). For
+  each segmentation problem, make sure to save the changepoint
+  positions of each model, and use `modelSelection` to compute the
+  exact path of models that will be selected for every possible
+  non-negative penalty value.
+* [Label error](#label-error). Use `labelError` to compute the number
+  of incorrect labels for each labeled segmentation problem and each
+  changepoint model. The goal of learning is to minimize the number of
+  incorrectly predicted labels.
+* [Outputs](#outputs). Use `targetIntervals` to compute a target
+  interval of log(penalty) values that predicts the minimum number of
+  incorrect labels for each segmentation problem. Create a target
+  interval matrix (one row for each segmentation problems, 2 columns)
+  which can be used as the output (target.mat argument) in the
+  `IntervalRegression*` functions.
+* [Inputs](#inputs). Compute a feature matrix (segmentation problems x
+  features) using `featureMatrix`. Features can be
+  simple statistics of each segmentation problem (quantiles, mean,
+  number of data points, estimated variance, etc).
+* [Learning](#learning). Use `IntervalRegressionCV` to learn a
+  penalty function, and automatically perform feature selection using
+  L1 regularization. If you want to evaluate the prediction accuracy
+  of the model you learn, make sure to set aside a "test set" of
+  labeled data that you do not use in this learning step (this method is
+  called cross-validation).
+* [Prediction](#prediction). Use the `predict.IntervalRegression`
+  method to compute predicted penalty values for all the segmentation
+  problems. This works even for unlabeled data, and for "test" data
+  sets where you have hidden some labels in a computational
+  cross-validation experiment.
+* [Evaluation](#evaluation). If you have set aside a "test set" of
+  labels that you did not use for learning, then you can now use
+  `ROChange` to compute test ROC curves. The AUC (area under the ROC
+  curve) and the percent incorrect labels in the test set can be used
+  to evaluate the prediction accuracy of your model.
+
+## Changepoints and model selection
+
+**Exercise** for the data sequence that you labeled above, compute
+optimal Gaussian changepoint models for 1 to 10 segments using the
+code below.
+
+```{r}
+max.segments <- 10
+(fit <- Segmentor3IsBack::Segmentor(
+  zoom.pro$logratio, model=2, Kmax=max.segments))
+```
+
+The `fit` object is an S4 class with slots
+
+* `breaks` the end position of each segment.
+* `parameters` the mean of each segment.
+
+Next, we convert the model to tidy format (a `data.frame` with one row
+per segment). The code below is specific to the `Segmentor` function;
+if you use a different changepoint detection package/function, you
+will have to write some other code to tidy the data.
+
+```{r}
+zoom.segs.list <- list()
+zoom.loss.vec <- rep(NA, max.segments)
+for(n.segments in 1:max.segments){
+  end <- fit@breaks[n.segments, 1:n.segments]
+  data.before.change <- end[-n.segments]
+  data.after.change <- data.before.change+1
+  pos.before.change <- as.integer(
+  (zoom.pro$position[data.before.change]+
+   zoom.pro$position[data.after.change])/2)
+  start <- c(1, data.after.change)
+  chromStart <- c(zoom.pro$position[1], pos.before.change)
+  chromEnd <- c(pos.before.change, max(zoom.pro$position))
+  seg.mean.vec <- fit@parameters[n.segments, 1:n.segments]
+  zoom.segs.list[[n.segments]] <- data.frame(
+    profile.id=zoom.profile,
+    chromosome=zoom.chromosome,
+    n.segments,
+    start,
+    end,
+    chromStart,
+    chromEnd,
+    mean=seg.mean.vec,
+    row.names=NULL)
+  data.mean.vec <- rep(seg.mean.vec, end-start+1)
+  stopifnot(length(data.mean.vec)==nrow(zoom.pro))
+  zoom.loss.vec[n.segments] <- sum((zoom.pro$logratio-data.mean.vec)^2)
+}
+```
+
+Notice that we computed `zoom.loss.vec` which is the sum of squared
+residuals of each model. Below we use that to construct a data.frame with
+one row for each model, which we can use with `modelSelection` to
+compute the models that will be selected for every possible penalty
+value. 
+
+```{r}
+zoom.models <- data.frame(
+  profile.id=zoom.profile,
+  chromosome=zoom.chromosome,
+  loss=zoom.loss.vec, n.segments=as.numeric(1:max.segments))
+(zoom.selection <- penaltyLearning::modelSelection(
+  zoom.models, complexity="n.segments"))
+```
+
+If $\lambda\geq 0$ is the non-negative penalty value, and $L_{i,s}$ 
+is the loss of the model with $s\in\{1,\dots,s_{\text{max}}\}$
+segments for data sequence $i$, then the model selection function is
+
+$$ s_i^*(\lambda) = \text{arg min}_s L_{i,s} + \lambda s $$
+	
+```{r}
+ggplot()+
+  geom_segment(aes(
+    min.lambda, n.segments,
+    xend=max.lambda, yend=n.segments),
+    size=1,
+    data=zoom.selection)+
+  xlab("penalty constant = lambda")+
+  scale_y_continuous(breaks=zoom.selection$n.segments)
+ggplot()+
+  geom_segment(aes(
+    min.log.lambda, n.segments,
+    xend=max.log.lambda, yend=n.segments),
+    size=1,
+    data=zoom.selection)+
+  xlab("log(penalty) = log(lambda)")+
+  scale_y_continuous(breaks=zoom.selection$n.segments)
+```
+
+As can be seen from the definition of $s_i^*(\lambda)$ and the figures
+above, a bigger penalty $\lambda$ results in a model with fewer segments/changes (and vice versa). Note that there are some models that are not selected for
+any penalty values (e.g. 3 or 6 segments for this data set).
+
+The predicted changepoint positions are every `chromStart` on segments
+after the first:
+
+```{r}
+(zoom.segs <- do.call(rbind, zoom.segs.list[zoom.selection$n.segments]))
+(zoom.changes <- subset(zoom.segs, 1 < start))
+```
+
+We use the code below to visualize the models along with the noisy
+data sequence:
+
+```{r}
+zoom.gg.models <- zoom.gg.lab+
+  theme(
+    panel.margin=grid::unit(0, "lines"),
+    panel.border=element_rect(fill=NA, color="grey50")
+  )+
+  facet_grid(n.segments ~ .)+
+  geom_vline(aes(
+    xintercept=chromStart/1e6),
+    data=zoom.changes,
+    color="green",
+    size=1,
+    linetype="dashed")+
+  geom_segment(aes(
+    chromStart/1e6, mean,
+    xend=chromEnd/1e6, yend=mean),
+    data=zoom.segs,
+    size=1,
+    color="green")
+print(zoom.gg.models)
+```
+
+## Label error
+
+Next, we compute the number of incorrect labels for each model. The
+`labelError` function inputs 3 data.frames:
+
+* `models` one row per changepoint model, with columns for loss and
+  model complexity.
+* `labels` one row for each label, with columns for label location and
+  type.
+* `changes` one row for each predicted changepoint, with a column for
+  the predicted changepoint position.
+
+```{r}
+zoom.error.list <- penaltyLearning::labelError(
+  zoom.selection,
+  zoom.labels,
+  zoom.changes,
+  problem.vars=c("profile.id", "chromosome"))
+str(zoom.error.list)
+```
+
+The result of `labelError` is a list of two data tables:
+
+* `model.errors` has one row per (sequence,model), with the total number
+  of incorrect labels.
+* `label.errors` has one row per (sequence,model,label), with the
+  fp/fn status of each label.
+  
+**Exercise** visualize the false negatives and false positives in the
+data set that you labeled, using the code below.
+
+```{r}
+zoom.gg.models+
+  penaltyLearning::geom_tallrect(aes(
+    xmin=min/1e6,
+    xmax=max/1e6,
+    linetype=status),
+    data=zoom.error.list$label.errors,
+    fill=NA)+
+    scale_linetype_manual("error type", values=c(
+      correct=0,
+      "false negative"=3,
+      "false positive"=1))
+```
+
+* **False positives** are labels with too many predicted changepoints,
+  drawn with a solid black border.
+* **False negatives** are labels with too few predicted changepoints,
+  drawn with a dotted black border.
+* **Question** which models are consistent with the labels in your data?
+
+## Outputs
+
+Now that we have computed the number of incorrect labels
+$e_i(s)\in\{0,1,2,\dots\}$ for this data sequence $i$ and every number of
+segments $s$, we can visualize the label error as function of the
+penalty, $$ E_i(\lambda) = e_i[s^*_i(\lambda)] $$
+
+```{r}
+zoom.errors.tall <- data.table::melt(
+  zoom.error.list$model.errors,
+  measure.vars=c("n.segments", "errors"))
+zoom.gg.errors <- ggplot()+
+  geom_segment(aes(
+    min.log.lambda, value,
+    xend=max.log.lambda, yend=value),
+    size=1,
+    data=zoom.errors.tall)+
+  theme_bw()+
+  theme(panel.margin=grid::unit(0, "lines"))+
+  facet_grid(variable ~ ., scales="free")+
+  scale_y_continuous("", breaks=0:max.segments)+
+  xlab("log(penalty) = log(lambda)")
+print(zoom.gg.errors)
+```
+
+Below we compute the target interval of penalty values that select
+changepoint models with minimal incorrect labels.
+  
+```{r}
+zoom.target <- penaltyLearning::targetIntervals(
+  zoom.error.list$model.errors,
+  problem.vars=c("profile.id", "chromosome"))
+zoom.target.tall <- data.table::melt(
+  zoom.target,
+  measure.vars=c("min.log.lambda", "max.log.lambda"),
+  variable.name="limit")[is.finite(value)]
+zoom.gg.errors+
+  geom_point(aes(
+    value,
+    errors,
+    fill=limit),
+    shape=21,
+    size=4,
+    data=data.frame(zoom.target.tall, variable="errors"))+
+  scale_fill_manual("limit", values=c(
+    min.log.lambda="black",
+    max.log.lambda="white"))  
+```
+
+The plot above emphasizes the target interval, which is used as the
+output in the machine learning problem:
+
+* the black dot shows the lower limit of the target interval. If a
+  smaller log(penalty) is predicted, then there are too many changepoints (false
+  positives).
+* the white dot shows the upper limit of the target interval. If a
+  larger log(penalty) is predicted, then there are too few
+  changepoints (false negatives).
+  
+The target interval is different for each labeled data sequence. Below
+we compute the target interval for each of the labeled data sequences
+in the six profiles that we showed in the beginning of the tutorial.
+  
+```{r}
+load("Segmentor.models.RData")
+six.segs <- Segmentor.models$segs[profile.id %in% some.ids]
+six.selection <- Segmentor.models$loss[profile.id %in% some.ids, {
+  penaltyLearning::modelSelection(.SD, complexity="n.segments")
+}, by=list(profile.id, chromosome)]
+six.error.list <- penaltyLearning::labelError(
+  six.selection, six.labels, six.segs[1 < start],
+  problem.vars=c("profile.id", "chromosome"))
+six.targets <- penaltyLearning::targetIntervals(
+  six.error.list$model.errors,
+  problem.vars=c("profile.id", "chromosome"))
+six.targets.tall <- data.table::melt(
+  six.targets,
+  measure.vars=c("min.log.lambda", "max.log.lambda"),
+  variable.name="limit")[is.finite(value)]
+ggplot()+
+  theme_bw()+
+  theme(panel.margin=grid::unit(0, "lines"))+
+  facet_grid(profile.id ~ chromosome)+
+  geom_segment(aes(
+    min.log.lambda, errors,
+    xend=max.log.lambda, yend=errors),
+    size=1,
+    data=six.error.list$model.errors)+
+  geom_point(aes(
+    value,
+    errors,
+    fill=limit),
+    shape=21,
+    size=4,
+    data=six.targets.tall)+
+  scale_fill_manual("limit", values=c(
+    min.log.lambda="black",
+    max.log.lambda="white"))+
+  scale_y_continuous(
+    "incorrectly predicted labels",
+    limits=c(0,1.2),
+    breaks=c(0,1))+
+  scale_x_continuous(
+    "log(penalty) = log(lambda)")
+```
+
+It is clear from the plot above that a model with minimal incorrect
+labels will predict a different penalty for each data sequence. 
+
+**Question:** discuss with your neighbor for 1 minute, why is there
+only one limit per data sequence? (only one target limit point per
+panel in the plot above)
+
+## Inputs
+
+To train a machine learning model, we first need to compute a vector
+$x_i\in\mathbb R^p$ of exactly $p$ features for each data sequence
+$i$. We then learn a function $f(x_i)=\log\lambda_i\in\mathbb R$. 
+
+**Example:** The BIC/SIC model selection criterion is $\lambda_i =
+\log n_i$, where $n_i$ is the number of data points to segment in
+sequence $i$. Thus in this framework we can think of the BIC/SIC
+criterion as a linear model with the feature $x_i=\log\log n_i$.
+$$f(x_i) = \log\lambda_i = 0 + 1*\log\log n_i$$
+
+```{r}
+six.BIC.dt <- data.table::data.table(six.profiles)[, list(
+  log.log.n=log(log(.N))
+  ), by=list(profile.id, chromosome)]
+```
+
+**Question:** what is the feature $x_i$ 
+
 * Compute a feature vector for each segmentation problem, and a
   feature matrix for each labeled set of related segmentation
   problems.
+  
+## Learning
+
 * Learn an affine function f(feature vector)=log(penalty).
 * Exercise: to learn the coefficients of the BIC penalty, what feature
   vector should be used?
 * Un-regularized interval regression (survival package). Learns
   weights for a given set of features, but may overfit if
   non-relevant features are used.
-* Elastic net regularized interval regression (anujkhare/iregnet
-  package on GitHub). Simultaneously learns weights and performs
-  feature selection. Avoids overfitting by setting some feature
-  weights to zero.
+* L1-regularized interval regression. Simultaneously learns weights
+  and performs feature selection. Avoids overfitting by setting some
+  feature weights to zero.
 
-# Cross-validation experiments
+## Prediction
+
+## Evaluation
 
 * K-fold cross-validation can be used to compare prediction accuracy
   of supervised and unsupervised changepoint detection.
