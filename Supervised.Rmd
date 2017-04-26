@@ -589,7 +589,7 @@ six.gg.errors <- ggplot()+
     limits=c(0,ymax.err),
     breaks=c(0,1))+
   scale_x_continuous(
-    "log(penalty) = log(lambda)")
+    "predicted log(penalty) = log(lambda)")
 print(six.gg.errors)
 ```
 
@@ -714,9 +714,12 @@ six.BIC.errors <- six.error.list$model.errors[six.BIC.selection, on=list(
 six.gg.errors.bic <- six.gg.errors+
   geom_point(aes(
     pred.log.lambda, errors, color=model),
-    shape=1,
-    size=3,
-    data=six.BIC.errors)
+    size=2,
+    data=six.BIC.errors)+
+  scale_color_manual(values=c(
+    "BIC/SIC"="#1B9E77",
+    survreg="#D95F02",
+    IntervalRegressionCV="#7570B3"))
 print(six.gg.errors.bic)
 ```
 
@@ -758,6 +761,8 @@ gg.supervised+
 ```
 
 ## Learning and prediction
+
+### survreg (un-regularized interval regression)
 
 We can use the survival package to learn a more accurate linear model,
 using the same log.log.n feature. To perform a more fair comparison,
@@ -826,8 +831,7 @@ six.survreg.surrogate <- six.survreg.res[, {
 six.gg.errors.survreg <- six.gg.errors.bic+
   geom_point(aes(
     pred.log.penalty, errors, color=model),
-    shape=1,
-    size=3,
+    size=2,
     data=six.survreg.errors)+
   geom_line(aes(
     log.penalty, surrogate.loss, color=model),
@@ -835,7 +839,8 @@ six.gg.errors.survreg <- six.gg.errors.bic+
 print(six.gg.errors.survreg)
 ```
 
-TODO comments on surrogtate loss.
+The plot above also shows the surrogate loss that `survreg` minimizes
+using a gradient descent algorithm.
 
 We can also visualize the survreg model predictions by plotting the
 data sequences via the code below.
@@ -874,18 +879,51 @@ gg.supervised+
   theme(legend.box="horizontal")
 ```
 
-TODO comments on CV model below.
+**Exercise:** the survreg model above assumed a Gaussian distribution
+for the log(penalty) values. Would using another distribution increase
+accuracy? Hint: try `survreg(dist="logistic")`.
+
+### IntervalRegressionCV (L1-regularized interval regression)
+
+In the previous sections, we assumed that the log(penalty) is an
+affine function of a given single feature. In this section, we show
+how a multi-variate affine penalty function can be learned using L1
+regularization. This is a machine learning technique that
+automatically selects features that result in good prediction
+accuracy. First we create a feature and target matrix for the data in
+the train set:
 
 ```{r}
 finite.feature.mat <- feature.mat[, apply(is.finite(feature.mat), 2, all)]
 train.feature.mat <- train.dt[, finite.feature.mat[paste(profile.id, chromosome),] ]
 train.target.mat <- train.dt[, cbind(min.log.lambda, max.log.lambda)]
+str(train.feature.mat)
+```
+
+The training set consists of 30 examples, each with 256
+features. Next, we use `IntervalRegressionCV` to fit the regularized
+linear model. If a foreach parallel backend is registered, the
+internal cross-validation loop is performed in parallel. We use
+`set.seed` in order to make the results reproducible (there is
+randomness in the fold assignment in the internal cross-validation
+loop).
+
+```{r}
 if(require(doParallel)){
   registerDoParallel()
 }
+set.seed(1)
 fit.cv <- penaltyLearning::IntervalRegressionCV(
-  train.feature.mat, train.target.mat, reg.type="1sd")
+  train.feature.mat, train.target.mat)
+coef(fit.cv)
+```
 
+It is clear form the output above that even though the model was
+trained using 256 possible input feature, it has selected only a few
+of them to use in the prediction function. We visualize the predicted
+penalty values as dots in the error curve plots below:
+
+```{r}
 six.cv.pred <- data.table(six.survreg.pred)
 six.cv.pred[, pred.log.penalty := {
   pred.feat.mat <- finite.feature.mat[paste(profile.id, chromosome), ]
@@ -899,15 +937,37 @@ six.cv.selection <- data.table(six.selection)[six.cv.pred, on=list(
   max.log.lambda > pred.log.lambda)]
 six.cv.errors <- six.error.list$model.errors[six.cv.selection, on=list(
   profile.id, chromosome, n.segments), nomatch=0L]
+six.cv.surrogate <- six.survreg.res[, {
+  ## IntervalRegressionCV minimizes the squared hinge loss.
+  squared.hinge <- function(x){
+    ifelse(x<1,(x-1)^2,0)
+  }
+  data.table(
+    model="IntervalRegressionCV",
+    log.penalty=log.pen.vec,
+    surrogate.loss=squared.hinge(
+      log.pen.vec-min.log.lambda)+squared.hinge(
+        max.log.lambda-log.pen.vec)
+  )[surrogate.loss < ymax.err]
+}, by=list(profile.id, chromosome)]
 six.gg.errors.survreg+
   geom_point(aes(
     pred.log.penalty, errors, color=model),
-    shape=1,
-    size=3,
-    data=six.cv.errors)
+    size=2,
+    data=six.cv.errors)+
+  geom_line(aes(
+    log.penalty, surrogate.loss, color=model),
+    data=six.cv.surrogate)
 ```
 
-TODO comments on plot below
+The plot above also shows the surrogate loss that
+`IntervalRegressionCV` minimizes using a gradient descent
+algorithm. Note how it is very similar to the `survreg` surrogate loss
+-- both are smooth functions which increase quadratically as the
+predicted value goes past the target interval limit. 
+
+Finally, we can also visualize the `IntervalRegressionCV` model in
+terms of the data sequences, labels, and predicted segmentation:
 
 ```{r figcv, fig.width=10}
 six.cv.labels <- six.error.list$label.errors[six.cv.selection, on=list(
@@ -943,7 +1003,21 @@ gg.supervised+
   theme(legend.box="horizontal")
 ```
 
+The plot above clearly shows the advantage of the machine learning
+approach: all labels are correctly predicted, including all labels on
+the test set (chromosome 11).
+
+**Exercise:** by default the `IntervalRegressionCV` function chooses
+the regularization parameter with minimum error, as estimated using an
+internal cross-validation loop. Another option is to choose the least
+complex model within 1 standard deviation. Re-fit the model using
+`IntervalRegressionCV(reg.type="1sd")`, view the error as a function
+of model complexity via `plot(fit.cv)`, then re-do the model
+prediction error plots. Is this model more or less accurate? 
+
 ## Evaluation
+
+
 
 * K-fold cross-validation can be used to compare prediction accuracy
   of supervised and unsupervised changepoint detection.
@@ -951,7 +1025,4 @@ gg.supervised+
   penalty functions: BIC, 1 feature un-regularized, multi-feature
   un-regularized, multi-feature regularized. Which penalty function is
   most accurate?
-* Exercise: perform cross-validation to compare Gaussian and Logistic
-  models for log(penalty) values. Which distribution results in more
-  accurate penalty functions?
  
