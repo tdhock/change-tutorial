@@ -59,12 +59,13 @@ of the six patients for which we have follow-up data.
 rownames(followup) <- followup$profile.id
 followup$status.profile <- with(followup, paste(status, profile.id))
 some.ids <- rownames(followup)
+library(data.table)
 someProfiles <- function(all.profiles){
   some <- subset(all.profiles, profile.id %in% some.ids)
   status.profile <- followup[paste(some$profile.id), "status.profile"]
   some$status.profile <- ifelse(
     is.na(status.profile), some$profile.id, status.profile)
-  some
+  data.table(some)
 }
 six.profiles <- someProfiles(neuroblastoma$profiles)
 ```
@@ -126,6 +127,7 @@ gg.supervised <- gg.unsupervised+
   penaltyLearning::geom_tallrect(aes(
     xmin=min/1e6, xmax=max/1e6, fill=annotation),
     alpha=0.5,
+    color=NA,
     data=six.labels)+
   scale_fill_manual("label", values=penaltyLearning::change.colors)+
   theme(legend.position="bottom")
@@ -516,13 +518,50 @@ we compute the target interval for each of the labeled data sequences
 in the six profiles that we showed in the beginning of the tutorial.
   
 ```{r}
-load("Segmentor.models.RData")
-six.segs <- Segmentor.models$segs[profile.id %in% some.ids]
-six.selection <- Segmentor.models$loss[profile.id %in% some.ids, {
-  penaltyLearning::modelSelection(.SD, complexity="n.segments")
-}, by=list(profile.id, chromosome)]
+six.problems.dt <- unique(six.profiles[, list(profile.id, chromosome, status.profile)])
+setkey(six.profiles, profile.id, chromosome)
+six.segs.list <- list()
+six.selection.list <- list()
+for(problem.i in 1:nrow(six.problems.dt)){
+  meta <- six.problems.dt[problem.i,]
+  pro <- six.profiles[meta]
+  max.segments <- min(nrow(pro), 10)
+  fit <- Segmentor3IsBack::Segmentor(pro$logratio, model=2, Kmax=max.segments)
+  rss.vec <- rep(NA, max.segments)
+  for(n.segments in 1:max.segments){
+    end <- fit@breaks[n.segments, 1:n.segments]
+    data.before.change <- end[-n.segments]
+    data.after.change <- data.before.change+1
+    pos.before.change <- as.integer(
+      (pro$position[data.before.change]+pro$position[data.after.change])/2)
+    start <- c(1, data.after.change)
+    chromStart <- c(pro$position[1], pos.before.change)
+    chromEnd <- c(pos.before.change, max(pro$position))
+    seg.mean.vec <- fit@parameters[n.segments, 1:n.segments]
+    data.mean.vec <- rep(seg.mean.vec, end-start+1)
+    rss.vec[n.segments] <- sum((pro$logratio-data.mean.vec)^2)
+    six.segs.list[[paste(problem.i, n.segments)]] <- data.table(
+      meta,
+      n.segments,
+      start,
+      end,
+      chromStart,
+      chromEnd,
+      mean=seg.mean.vec)
+  }
+  loss.dt <- data.table(
+    meta,
+    n.segments=1:max.segments,
+    loss=rss.vec)
+  six.selection.list[[problem.i]] <- penaltyLearning::modelSelection(
+    loss.dt, complexity="n.segments")
+}
+
+six.selection <- do.call(rbind, six.selection.list)
+six.segs <- do.call(rbind, six.segs.list)
+six.changes <- six.segs[1 < start]
 six.error.list <- penaltyLearning::labelError(
-  six.selection, six.labels, six.segs[1 < start],
+  six.selection, six.labels, six.changes,
   problem.vars=c("profile.id", "chromosome"))
 six.targets <- penaltyLearning::targetIntervals(
   six.error.list$model.errors,
@@ -530,7 +569,8 @@ six.targets <- penaltyLearning::targetIntervals(
 six.targets.tall <- data.table::melt(
   six.targets,
   measure.vars=c("min.log.lambda", "max.log.lambda"),
-  variable.name="limit")[is.finite(value)]
+  variable.name="limit",
+  value.name="log.lambda")[is.finite(log.lambda)]
 ggplot()+
   theme_bw()+
   theme(panel.margin=grid::unit(0, "lines"))+
@@ -541,7 +581,7 @@ ggplot()+
     size=1,
     data=six.error.list$model.errors)+
   geom_point(aes(
-    value,
+    log.lambda,
     errors,
     fill=limit),
     shape=21,
@@ -573,15 +613,114 @@ $i$. We then learn a function $f(x_i)=\log\lambda_i\in\mathbb R$.
 
 **Example:** The BIC/SIC model selection criterion is $\lambda_i =
 \log n_i$, where $n_i$ is the number of data points to segment in
-sequence $i$. Thus in this framework we can think of the BIC/SIC
-criterion as a linear model with the feature $x_i=\log\log n_i$.
-$$f(x_i) = \log\lambda_i = 0 + 1*\log\log n_i$$
+sequence $i$. Thus in this framework the BIC/SIC criterion is a linear
+model with the feature $x_i=\log\log n_i$.  
+$$f(x_i) = \log\lambda_i = x_i = \log\log n_i$$
+
+The plot below visualizes the target intervals in this feature space.
 
 ```{r}
-six.BIC.dt <- data.table::data.table(six.profiles)[, list(
+six.BIC.dt <- six.profiles[, list(
   log.log.n=log(log(.N))
-  ), by=list(profile.id, chromosome)]
+), by=list(profile.id, chromosome)]
+six.features.tall <- six.BIC.dt[six.targets.tall, on=list(
+  profile.id, chromosome)]
+six.gg.limits <- ggplot()+
+  geom_point(aes(
+    log.log.n, log.lambda, fill=limit),
+    shape=21,
+    data=six.features.tall)+
+  scale_fill_manual("limit", values=c(
+    min.log.lambda="black",
+    max.log.lambda="white"))+
+  scale_x_continuous(
+    "feature log(log(n))")+
+  scale_y_continuous(
+    "log(penalty)=log(lambda)")
+print(six.gg.limits)
 ```
+
+In the plot above, each point represents a finite limit of a target
+interval. The goal of learning is to find a function which is below
+the white dots (upper limits) and above the black dots (lower
+limits). Note that this is not the same problem as binary
+classification, which the plot below makes clear.
+
+```{r}
+six.features.targets <- six.BIC.dt[six.targets, on=list(
+  profile.id, chromosome)]
+six.gg.limits+
+  geom_segment(aes(
+    log.log.n, min.log.lambda,
+    xend=log.log.n, yend=max.log.lambda),
+    data=six.features.targets)
+```
+
+In the plot above, each line segment represents the target interval of
+penalty values that achieves minimal incorrect regions for a labeled
+data sequence. The goal of learning is to find a function that
+intersects as many intervals as possible. 
+
+In this context we can plot the BIC/SIC model as a line with slope 1
+and intercept 0, and we can visualize the errors it makes using the
+red line segments below.
+
+```{r}
+six.features.targets[, pred.log.lambda := log.log.n ]
+six.features.targets[, residual := penaltyLearning::targetIntervalResidual(
+  cbind(min.log.lambda, max.log.lambda), pred.log.lambda)]
+six.gg.limits+
+  geom_abline(slope=1, intercept=0)+
+  geom_segment(aes(
+    log.log.n, pred.log.lambda,
+    xend=log.log.n, yend=pred.log.lambda-residual),
+    color="red",
+    data=six.features.targets)
+```
+
+We can see from the plot above that there are 5 data sequences for
+which the BIC predicts a penalty value outside of the target
+interval. We can visualize the number of incorrect labels for this
+model by plotting the data and labels below.
+
+```{r}
+six.BIC.selection <- data.table(six.selection)[six.BIC.dt, on=list(
+  profile.id, chromosome,
+  min.log.lambda < log.log.n,
+  max.log.lambda > log.log.n)]
+six.BIC.labels <- six.error.list$label.errors[six.BIC.selection, on=list(
+  profile.id, chromosome, n.segments), nomatch=0L]
+six.BIC.changes <- six.changes[six.BIC.selection, on=list(
+  profile.id, chromosome, n.segments), nomatch=0L]
+six.BIC.segs <- six.segs[six.BIC.selection, on=list(
+  profile.id, chromosome, n.segments)]
+gg.supervised+
+  ggtitle("BIC/SIC model changepoints and label errors")+
+  penaltyLearning::geom_tallrect(aes(
+    xmin=min/1e6,
+    xmax=max/1e6,
+    linetype=status),
+    fill=NA,
+    data=six.BIC.labels)+
+  scale_linetype_manual("error type", values=c(
+    correct=0,
+    "false negative"=3,
+    "false positive"=1))+
+  geom_vline(aes(
+    xintercept=chromStart/1e6),
+    data=six.BIC.changes,
+    color="green",
+    size=1,
+    linetype="dashed")+
+  geom_segment(aes(
+    chromStart/1e6, mean,
+    xend=chromEnd/1e6, yend=mean),
+    data=six.BIC.segs,
+    size=1,
+    color="green")+
+  theme(legend.box="horizontal")
+```
+
 
 **Question:** what is the feature $x_i$ 
 

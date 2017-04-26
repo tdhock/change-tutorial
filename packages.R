@@ -4,7 +4,7 @@ works_with_R("3.3.3",
              Segmentor3IsBack="2.0",
              data.table="1.10.4",
              survival="2.41.2",
-             "tdhock/penaltyLearning@96ffb10ee02051ceacc44b3d317088c568e41f8c",
+             "tdhock/penaltyLearning@8528b3217fed34d4818a0ce94d7aff5e8cc3bc16",
              "faizan-khan-iit/ggplot2@5fb99d0cece13239bbbc09c6b8a7da7f86ac58e2",
              "tdhock/animint@c0db9f34c525bec35c797ccdf8be9564b67c578c",
              "tdhock/directlabels@dcf34672129bf99a79ddfaceaef73236ae0f696d")
