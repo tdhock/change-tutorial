@@ -240,37 +240,29 @@ following computations:
   favorite changepoint detection package to compute a sequence of
   models of increasing complexity (say from 0 to 20 changepoints). For
   each segmentation problem, make sure to save the changepoint
-  positions of each model, and use `modelSelection` to compute the
-  exact path of models that will be selected for every possible
-  non-negative penalty value.
-* [Label error](#label-error). Use `labelError` to compute the number
-  of incorrect labels for each labeled segmentation problem and each
-  changepoint model. The goal of learning is to minimize the number of
-  incorrectly predicted labels.
-* [Outputs](#outputs). Use `targetIntervals` to compute a target
-  interval of log(penalty) values that predicts the minimum number of
-  incorrect labels for each segmentation problem. Create a target
-  interval matrix (one row for each segmentation problems, 2 columns)
-  which can be used as the output (target.mat argument) in the
-  `IntervalRegression*` functions.
+  positions of each model, and use `penaltyLearning::modelSelection`
+  to compute the exact path of models that will be selected for every
+  possible non-negative penalty value.
+* [Label error](#label-error). Use `penaltyLearning::labelError` to
+  compute the number of incorrect labels for each labeled segmentation
+  problem and each changepoint model. The goal of learning is to
+  minimize the number of incorrectly predicted labels.
+* [Outputs](#outputs). Use `penaltyLearning::targetIntervals` to
+  compute a target interval of log(penalty) values that predicts the
+  minimum number of incorrect labels for each segmentation
+  problem. Create a target interval matrix (one row for each
+  segmentation problems, 2 columns) which can be used as the output in
+  the supervised machine learning problem.
 * [Inputs](#inputs). Compute a feature matrix (segmentation problems x
-  features) using `featureMatrix`. Features can be
-  simple statistics of each segmentation problem (quantiles, mean,
-  number of data points, estimated variance, etc).
-* [Learning](#learning). Use `IntervalRegressionCV` to learn a
-  penalty function, and automatically perform feature selection using
-  L1 regularization. If you want to evaluate the prediction accuracy
-  of the model you learn, make sure to set aside a "test set" of
-  labeled data that you do not use in this learning step (this method is
-  called cross-validation).
-* [Prediction](#prediction). Use the `predict.IntervalRegression`
-  method to compute predicted penalty values for all the segmentation
-  problems. This works even for unlabeled data, and for "test" data
-  sets where you have hidden some labels in a computational
-  cross-validation experiment.
+  features) using `penaltyLearning::featureMatrix`. Or do it yourself
+  using simple statistics of each segmentation problem (quantiles,
+  mean, number of data points, estimated variance, etc).
+* [Learning and prediction](#learning-and-prediction). Use
+  `survival::survreg` or `penaltyLearning::IntervalRegressionCV` to
+  learn a penalty function.
 * [Evaluation](#evaluation). If you have set aside a "test set" of
   labels that you did not use for learning, then you can now use
-  `ROChange` to compute test ROC curves. The AUC (area under the ROC
+  `penaltyLearning::ROChange` to compute test ROC curves. The AUC (area under the ROC
   curve) and the percent incorrect labels in the test set can be used
   to evaluate the prediction accuracy of your model.
 
@@ -566,12 +558,13 @@ six.error.list <- penaltyLearning::labelError(
 six.targets <- penaltyLearning::targetIntervals(
   six.error.list$model.errors,
   problem.vars=c("profile.id", "chromosome"))
+ymax.err <- 1.2
 six.targets.tall <- data.table::melt(
   six.targets,
   measure.vars=c("min.log.lambda", "max.log.lambda"),
   variable.name="limit",
   value.name="log.lambda")[is.finite(log.lambda)]
-ggplot()+
+six.gg.errors <- ggplot()+
   theme_bw()+
   theme(panel.margin=grid::unit(0, "lines"))+
   facet_grid(profile.id ~ chromosome)+
@@ -585,17 +578,19 @@ ggplot()+
     errors,
     fill=limit),
     shape=21,
-    size=4,
+    size=3,
+    alpha=0.5,
     data=six.targets.tall)+
   scale_fill_manual("limit", values=c(
     min.log.lambda="black",
     max.log.lambda="white"))+
   scale_y_continuous(
     "incorrectly predicted labels",
-    limits=c(0,1.2),
+    limits=c(0,ymax.err),
     breaks=c(0,1))+
   scale_x_continuous(
     "log(penalty) = log(lambda)")
+print(six.gg.errors)
 ```
 
 It is clear from the plot above that a model with minimal incorrect
@@ -609,20 +604,40 @@ panel in the plot above)
 
 To train a machine learning model, we first need to compute a vector
 $x_i\in\mathbb R^p$ of exactly $p$ features for each data sequence
-$i$. We then learn a function $f(x_i)=\log\lambda_i\in\mathbb R$. 
+$i$. We then learn a function $f(x_i)=\log\lambda_i\in\mathbb R$. To
+compute a feature matrix, use the code below:
+
+```{r}
+feature.mat <- penaltyLearning::featureMatrix(
+  six.profiles,
+  problem.vars=c("profile.id", "chromosome"),
+  data.var="logratio")
+str(feature.mat)
+```
+
+The feature matrix is 144 rows (one for each data sequence) by 365
+features. Which features should we use to predict log(penalty) values?
+If you have a lot of labels, you can use
+`penaltyLearning::IntervalRegressionCV` which uses L1-regularization
+to automatically select relevant features -- more details in the next
+section. For now we will discuss the simpler unsupervised BIC/SIC
+model.
 
 **Example:** The BIC/SIC model selection criterion is $\lambda_i =
 \log n_i$, where $n_i$ is the number of data points to segment in
 sequence $i$. Thus in this framework the BIC/SIC criterion is a linear
-model with the feature $x_i=\log\log n_i$.  
+model with the feature $x_i=\log\log n_i$ -- this is the column
+`n.loglog` of the feature matrix.
 $$f(x_i) = \log\lambda_i = x_i = \log\log n_i$$
 
 The plot below visualizes the target intervals in this feature space.
 
 ```{r}
 six.BIC.dt <- six.profiles[, list(
-  log.log.n=log(log(.N))
+  log.log.n=log(log(.N)),
+  model="BIC/SIC"
 ), by=list(profile.id, chromosome)]
+six.BIC.dt[, pred.log.lambda := log.log.n]
 six.features.tall <- six.BIC.dt[six.targets.tall, on=list(
   profile.id, chromosome)]
 six.gg.limits <- ggplot()+
@@ -666,28 +681,49 @@ and intercept 0, and we can visualize the errors it makes using the
 red line segments below.
 
 ```{r}
-six.features.targets[, pred.log.lambda := log.log.n ]
 six.features.targets[, residual := penaltyLearning::targetIntervalResidual(
   cbind(min.log.lambda, max.log.lambda), pred.log.lambda)]
-six.gg.limits+
-  geom_abline(slope=1, intercept=0)+
+bic.line.dt <- data.table(
+  slope=1, intercept=0, model="BIC/SIC")
+six.gg.bic <- six.gg.limits+
+  geom_abline(aes(
+    slope=slope, intercept=intercept, color=model),
+    size=1,
+    data=bic.line.dt)+
   geom_segment(aes(
     log.log.n, pred.log.lambda,
-    xend=log.log.n, yend=pred.log.lambda-residual),
-    color="red",
+    xend=log.log.n, yend=pred.log.lambda-residual,
+    color=model),
     data=six.features.targets)
+print(six.gg.bic)
 ```
 
 We can see from the plot above that there are 5 data sequences for
-which the BIC predicts a penalty value outside of the target
-interval. We can visualize the number of incorrect labels for this
-model by plotting the data and labels below.
+which the BIC/SIC predicts a penalty value outside of the target
+interval. It is clear that the number of errors could be reduced by
+simply decreasing the intercept (moving the line down). Another way to
+visualize the predicted penalty values are on the error function plot:
 
 ```{r}
 six.BIC.selection <- data.table(six.selection)[six.BIC.dt, on=list(
   profile.id, chromosome,
   min.log.lambda < log.log.n,
   max.log.lambda > log.log.n)]
+six.BIC.errors <- six.error.list$model.errors[six.BIC.selection, on=list(
+  profile.id, chromosome, n.segments), nomatch=0L]
+six.gg.errors.bic <- six.gg.errors+
+  geom_point(aes(
+    pred.log.lambda, errors, color=model),
+    shape=1,
+    size=3,
+    data=six.BIC.errors)
+print(six.gg.errors.bic)
+```
+
+We can also visualize the number of incorrect labels for the BIC/SIC
+model by plotting the data, segmentation and labels below.
+
+```{r figBIC, fig.width=10}
 six.BIC.labels <- six.error.list$label.errors[six.BIC.selection, on=list(
   profile.id, chromosome, n.segments), nomatch=0L]
 six.BIC.changes <- six.changes[six.BIC.selection, on=list(
@@ -721,26 +757,191 @@ gg.supervised+
   theme(legend.box="horizontal")
 ```
 
+## Learning and prediction
 
-**Question:** what is the feature $x_i$ 
+We can use the survival package to learn a more accurate linear model,
+using the same log.log.n feature. To perform a more fair comparison,
+we will hold out chromosome 11 as a test set, and only train the model
+using the other labeled chromosomes.
 
-* Compute a feature vector for each segmentation problem, and a
-  feature matrix for each labeled set of related segmentation
-  problems.
-  
-## Learning
+```{r}
+library(survival)
+train.dt <- six.features.targets[chromosome!=11]
+(fit.survreg <- survreg(
+  Surv(min.log.lambda, max.log.lambda, type="interval2") ~ log.log.n,
+  train.dt, dist="gaussian"))
+```
 
-* Learn an affine function f(feature vector)=log(penalty).
-* Exercise: to learn the coefficients of the BIC penalty, what feature
-  vector should be used?
-* Un-regularized interval regression (survival package). Learns
-  weights for a given set of features, but may overfit if
-  non-relevant features are used.
-* L1-regularized interval regression. Simultaneously learns weights
-  and performs feature selection. Avoids overfitting by setting some
-  feature weights to zero.
+It is clear that the coefficients of the learned model are different
+from the BIC/SIC model. We can visualize the regression line in the
+feature space via the code below:
 
-## Prediction
+```{r}
+survreg.line.dt <- data.table(t(coef(fit.survreg)), model="survreg")
+six.survreg.pred <- data.table(six.BIC.dt)
+six.survreg.pred[, model := "survreg"]
+six.survreg.pred[, pred.log.lambda := predict(fit.survreg, six.survreg.pred)]
+six.survreg.res <- six.survreg.pred[six.features.targets, on=list(
+  profile.id, chromosome)]
+six.survreg.res[, residual := penaltyLearning::targetIntervalResidual(
+  cbind(min.log.lambda, max.log.lambda), pred.log.lambda)]
+six.gg.bic+
+  geom_abline(aes(
+    slope=log.log.n, intercept=`(Intercept)`, color=model),
+    size=1,
+    data=survreg.line.dt)+
+  geom_segment(aes(
+    log.log.n, pred.log.lambda,
+    xend=log.log.n, yend=pred.log.lambda-residual,
+    color=model),
+    data=six.survreg.res)
+```
+
+The plot below shows the surrogate loss minimized by the survreg
+function, and the predicted errors.
+
+```{r}
+six.survreg.pred[, pred.log.penalty := pred.log.lambda]
+six.survreg.selection <- data.table(six.selection)[six.survreg.pred, on=list(
+  profile.id, chromosome,
+  min.log.lambda < pred.log.lambda,
+  max.log.lambda > pred.log.lambda)]
+six.survreg.errors <- six.error.list$model.errors[six.survreg.selection, on=list(
+  profile.id, chromosome, n.segments), nomatch=0L]
+log.pen.vec <- six.error.list$model.errors[, seq(
+  min(max.log.lambda), max(min.log.lambda), l=100)]
+six.survreg.surrogate <- six.survreg.res[, {
+  ## For censored observations, survreg finds a linear function that
+  ## predicts mean values that maximize the normal CDF (pnorm) --
+  ## equivalent to minimizing the negative log likelihood below.
+  neg.log.lik <- -log(
+    pnorm(max.log.lambda, log.pen.vec, fit.survreg$scale)-
+    pnorm(min.log.lambda, log.pen.vec, fit.survreg$scale))
+  data.table(
+    model="survreg",
+    log.penalty=log.pen.vec,
+    surrogate.loss=neg.log.lik
+  )[neg.log.lik < ymax.err]
+}, by=list(profile.id, chromosome)]
+six.gg.errors.survreg <- six.gg.errors.bic+
+  geom_point(aes(
+    pred.log.penalty, errors, color=model),
+    shape=1,
+    size=3,
+    data=six.survreg.errors)+
+  geom_line(aes(
+    log.penalty, surrogate.loss, color=model),
+    data=six.survreg.surrogate)
+print(six.gg.errors.survreg)
+```
+
+TODO comments on surrogtate loss.
+
+We can also visualize the survreg model predictions by plotting the
+data sequences via the code below.
+
+```{r figsurvreg, fig.width=10}
+six.survreg.labels <- six.error.list$label.errors[six.survreg.selection, on=list(
+  profile.id, chromosome, n.segments), nomatch=0L]
+six.survreg.changes <- six.changes[six.survreg.selection, on=list(
+  profile.id, chromosome, n.segments), nomatch=0L]
+six.survreg.segs <- six.segs[six.survreg.selection, on=list(
+  profile.id, chromosome, n.segments)]
+gg.supervised+
+  ggtitle("survreg 1 feature (log.log.n) model changepoints and label errors")+
+  penaltyLearning::geom_tallrect(aes(
+    xmin=min/1e6,
+    xmax=max/1e6,
+    linetype=status),
+    fill=NA,
+    data=six.survreg.labels)+
+  scale_linetype_manual("error type", values=c(
+    correct=0,
+    "false negative"=3,
+    "false positive"=1))+
+  geom_vline(aes(
+    xintercept=chromStart/1e6),
+    data=six.survreg.changes,
+    color="green",
+    size=1,
+    linetype="dashed")+
+  geom_segment(aes(
+    chromStart/1e6, mean,
+    xend=chromEnd/1e6, yend=mean),
+    data=six.survreg.segs,
+    size=1,
+    color="green")+
+  theme(legend.box="horizontal")
+```
+
+TODO comments on CV model below.
+
+```{r}
+finite.feature.mat <- feature.mat[, apply(is.finite(feature.mat), 2, all)]
+train.feature.mat <- train.dt[, finite.feature.mat[paste(profile.id, chromosome),] ]
+train.target.mat <- train.dt[, cbind(min.log.lambda, max.log.lambda)]
+if(require(doParallel)){
+  registerDoParallel()
+}
+fit.cv <- penaltyLearning::IntervalRegressionCV(
+  train.feature.mat, train.target.mat, reg.type="1sd")
+
+six.cv.pred <- data.table(six.survreg.pred)
+six.cv.pred[, pred.log.penalty := {
+  pred.feat.mat <- finite.feature.mat[paste(profile.id, chromosome), ]
+  predict(fit.cv, pred.feat.mat)
+}]
+six.cv.pred[, model := "IntervalRegressionCV"]
+six.cv.pred[, pred.log.lambda := pred.log.penalty]
+six.cv.selection <- data.table(six.selection)[six.cv.pred, on=list(
+  profile.id, chromosome,
+  min.log.lambda < pred.log.lambda,
+  max.log.lambda > pred.log.lambda)]
+six.cv.errors <- six.error.list$model.errors[six.cv.selection, on=list(
+  profile.id, chromosome, n.segments), nomatch=0L]
+six.gg.errors.survreg+
+  geom_point(aes(
+    pred.log.penalty, errors, color=model),
+    shape=1,
+    size=3,
+    data=six.cv.errors)
+```
+
+TODO comments on plot below
+
+```{r figcv, fig.width=10}
+six.cv.labels <- six.error.list$label.errors[six.cv.selection, on=list(
+  profile.id, chromosome, n.segments), nomatch=0L]
+six.cv.changes <- six.changes[six.cv.selection, on=list(
+  profile.id, chromosome, n.segments), nomatch=0L]
+six.cv.segs <- six.segs[six.cv.selection, on=list(
+  profile.id, chromosome, n.segments)]
+gg.supervised+
+  ggtitle("IntervalRegressionCV multi-feature model changepoints and label errors")+
+  penaltyLearning::geom_tallrect(aes(
+    xmin=min/1e6,
+    xmax=max/1e6,
+    linetype=status),
+    fill=NA,
+    data=six.cv.labels)+
+  scale_linetype_manual("error type", values=c(
+    correct=0,
+    "false negative"=3,
+    "false positive"=1))+
+  geom_vline(aes(
+    xintercept=chromStart/1e6),
+    data=six.cv.changes,
+    color="green",
+    size=1,
+    linetype="dashed")+
+  geom_segment(aes(
+    chromStart/1e6, mean,
+    xend=chromEnd/1e6, yend=mean),
+    data=six.cv.segs,
+    size=1,
+    color="green")+
+  theme(legend.box="horizontal")
+```
 
 ## Evaluation
 
