@@ -1,5 +1,7 @@
 ** TODOs
 
+Compare with BIC from PELT [[file:pelt.models.R]]
+
 CRAN submission because penaltyLearning has compiled code:
 - remove test-peaks.R which needs coseg, PeakSegDP, and PeakError
   (remove from Suggests also)
