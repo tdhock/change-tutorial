@@ -793,15 +793,16 @@ function plot below.
 ```{r}
 six.BIC.errors <- six.error.list$model.errors[six.BIC.selection, on=list(
   profile.id, chromosome, n.segments), nomatch=0L]
+model.colors <- c(
+  "BIC/SIC"="#1B9E77",
+  survreg="#D95F02",
+  IntervalRegressionCV="#7570B3")
 six.gg.errors.bic <- six.gg.errors+
   geom_point(aes(
     pred.log.lambda, errors, color=model),
     size=2,
     data=six.BIC.errors)+
-  scale_color_manual(values=c(
-    "BIC/SIC"="#1B9E77",
-    survreg="#D95F02",
-    IntervalRegressionCV="#7570B3"))
+  scale_color_manual(values=model.colors)
 print(six.gg.errors.bic)
 ```
 
@@ -1081,7 +1082,71 @@ model.
 
 Since we did not use the chromosome 11 labels to train any of the
 models above, we can use those labels to evaluate the prediction
-accuracy of the learned models.
+accuracy of the learned models. In fact, we have already
+**qualitatively** evaluated the accuracy of the predictions by visual
+inspection of the plots in the last section. However because we have
+labels, we can also **quantitatively** evaluate the prediction
+accuracy by computing the number of incorrect labels and AUC (area
+under the ROC curve).
+
+```{r}
+model.pred.list <- list(
+  IntervalRegressionCV=six.cv.pred,
+  "BIC/SIC"=six.BIC.dt,
+  survreg=six.survreg.pred)
+roc.list <- list()
+auc.list <- list()
+for(model in names(model.pred.list)){
+  model.pred <- model.pred.list[[model]]
+  model.roc <- penaltyLearning::ROChange(
+    six.error.list$model.errors, model.pred[chromosome==11],
+    problem.vars=c("profile.id", "chromosome"))
+  roc.list[[model]] <- data.table(model, model.roc$roc)
+  auc.list[[model]] <- with(model.roc, data.table(
+    model, auc, thresholds[threshold=="predicted"]))
+}
+roc <- do.call(rbind, roc.list)
+(auc <- do.call(rbind, auc.list))
+```
+
+The table above shows the error/accuracy of the three models with
+respect to the labels in the test data (chromosome 11). It is clear
+that the IntervalRegressionCV is slightly more accurate (higher auc
+and lower errors). The ROC curves are shown below:
+
+```{r}
+ggplot()+
+  scale_color_manual(values=model.colors)+
+  geom_path(aes(
+    FPR, TPR, color=model, linetype=model),
+    size=1,
+    data=roc)+
+  geom_point(aes(
+    FPR, TPR, color=model, linetype=model),
+    size=3,
+    data=auc)
+```
+
+However, with so few labels, and only one test set, it is
+difficult/impossible to tell if there is any significant difference
+between models. Below we use K-fold cross-validation to evaluate the
+models:
+
+* we assign each labeled data sequence to one of K folds.
+* for each fold, we set aside the corresponding data in that fold as a
+  test set.
+* we then train each of the models using all of the other folds (not
+  using the test fold at all during this training phase).
+* after each model has been trained, we compute predicted penalty
+  values for the test data, then accuracy metrics (percent incorrect
+  labels and AUC).
+* we then repeat the process for each of the folds, and check to see
+  if any method is better on average over all of the test sets.
+  
+Since the neuroblastoma data set is relatively big (3418 labeled data
+sequences), we have pre-computed the Segmentor models, which we load
+using the code below. (to re-compute them on your computer, run
+[Segmentor.models.R](https://github.com/tdhock/change-tutorial/blob/master/Segmentor.models.R))
 
 ```{r}
 if(!file.exists("Segmentor.models.RData")){
@@ -1092,10 +1157,122 @@ if(!file.exists("Segmentor.models.RData")){
 load("Segmentor.models.RData")
 ```
 
-* K-fold cross-validation can be used to compare prediction accuracy
-  of supervised and unsupervised changepoint detection.
-* Compute test error and ROC curves for unsupervised and supervised
-  penalty functions: BIC, 1 feature un-regularized, multi-feature
-  un-regularized, multi-feature regularized. Which penalty function is
-  most accurate?
- 
+Before performing cross-validation, we can compute the error
+functions, features and target intervals for all of the labeled data.
+
+```{r}
+nb.selection <- Segmentor.models$loss[, penaltyLearning::modelSelection(
+  .SD, complexity="n.segments"), by=list(
+    profile.id, chromosome)]
+nb.error.list <- penaltyLearning::labelError(
+  nb.selection,
+  neuroblastoma$annotations,
+  Segmentor.models$segs[1 < start],
+  problem.vars=c("profile.id", "chromosome")
+)
+nb.target.dt <- penaltyLearning::targetIntervals(
+  nb.error.list$model.errors,
+  problem.vars=c("profile.id", "chromosome"))
+labeled.profiles <- data.table(
+  neuroblastoma$profiles)[nb.target.dt[, list(
+    profile.id, chromosome)], on=list(
+    profile.id, chromosome)]
+labeled.feature.mat <- penaltyLearning::featureMatrix(
+  labeled.profiles,
+  problem.vars=c("profile.id", "chromosome"),
+  data.var="logratio")
+```
+
+Rather than training on all features (which is possible but takes a
+bit too long for this tutorial), we will just use the following subset:
+
+```{r}
+(some.feature.names <- c(
+  colnames(labeled.feature.mat)[1:5],
+  rownames(coef(fit.cv))[-1]))
+```
+
+Next we assign folds to targets,
+
+```{r}
+set.seed(1)
+n.folds <- 5
+nb.target.dt[, fold := sample(rep(1:n.folds, l=.N))]
+```
+
+Then we loop over test folds,
+
+```{r}
+cv.roc.list <- list()
+cv.auc.list <- list()
+for(test.fold in 1:n.folds){
+  train.target.dt <- nb.target.dt[fold!=test.fold]
+  train.id.vec <- train.target.dt[, paste(profile.id, chromosome)]
+  train.features <- labeled.feature.mat[train.id.vec, ]
+  train.target.mat <- train.target.dt[, cbind(min.log.lambda, max.log.lambda)]
+  print(test.fold)
+  set.seed(1)
+  fit <- penaltyLearning::IntervalRegressionCV(
+    train.features[, some.feature.names], train.target.mat)
+  train.target.dt$feature <- train.features[, "n.loglog"]
+  fit.survreg <- survreg(
+    Surv(min.log.lambda, max.log.lambda, type="interval2") ~ feature,
+    train.target.dt, dist="gaussian")
+  ## compute predictions
+  test.target.dt <- nb.target.dt[fold==test.fold]
+  test.id.vec <- test.target.dt[, paste(profile.id, chromosome)]
+  test.feature.vec <- labeled.feature.mat[test.id.vec, "n.loglog"]
+  pred.list <- list(
+    "BIC/SIC"=test.feature.vec,
+    survreg=predict(fit.survreg, data.table(feature=test.feature.vec)),
+    IntervalRegressionCV=predict(fit, labeled.feature.mat[test.id.vec,]))
+  for(model in names(pred.list)){
+    pred.dt <- data.table(
+      test.target.dt,
+      pred.log.lambda=as.numeric(pred.list[[model]]))
+    pred.roc <- penaltyLearning::ROChange(
+      nb.error.list$model.errors,
+      pred.dt,
+      problem.vars=c("profile.id", "chromosome"))
+    cv.roc.list[[paste(test.fold, model)]] <- data.table(
+      test.fold, model, pred.roc$roc)
+    cv.auc.list[[paste(test.fold, model)]] <- with(pred.roc, data.table(
+      test.fold, model, auc, thresholds[threshold=="predicted"]))
+  }
+}
+cv.auc <- do.call(rbind, cv.auc.list)
+cv.roc <- do.call(rbind, cv.roc.list)
+
+cv.auc[, accuracy.percent := 100-error.percent]
+cv.auc.tall <- melt(cv.auc, measure.vars=c("accuracy.percent", "auc"))
+cv.means <- cv.auc.tall[, list(
+  mean=mean(value),
+  sd=sd(value)
+), by=list(model, variable)]
+levs <- cv.means[variable=="auc"][order(mean), model]
+cv.auc.tall[, model.fac := factor(model, levs)]
+ggplot()+
+  theme_bw()+
+  theme(panel.margin=grid::unit(0, "lines"))+
+  facet_grid(. ~ variable, scales="free")+
+  geom_point(aes(
+    value, model.fac),
+    data=cv.auc.tall)+
+  xlab("")
+```
+
+It is clear that survreg is significantly more accurate than BIC/SIC,
+and IntervalRegressionCV is slightly more accurate. The ROC curves are
+plotted below.
+
+```{r}
+ggplot()+
+  geom_path(aes(
+    FPR, TPR, color=model, group=test.fold),
+    data=cv.roc)+
+  geom_point(aes(
+    FPR, TPR, color=model),
+    data=cv.auc)+
+  coord_equal(xlim=c(0, 0.5), ylim=c(0.5, 1))
+```
+

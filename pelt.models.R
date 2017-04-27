@@ -1,7 +1,5 @@
 source("packages.R")
 
-max.segments <- 20
-
 data(neuroblastoma)
 
 problem.list <- with(neuroblastoma, {
