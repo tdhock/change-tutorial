@@ -1,5 +1,7 @@
 Supervised.html: Supervised.Rmd
 	Rscript -e 'rmarkdown::render("Supervised.Rmd")'
+figure-regression-interactive/index.html: figure-regression-interactive.R
+	R --no-save < $<
 figure-cv.png: figure-cv.R test.error.RData
 	R --no-save < $<
 test.error.RData: test.error.R Segmentor.models.RData

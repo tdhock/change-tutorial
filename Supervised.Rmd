@@ -1185,7 +1185,7 @@ using the code below. (to re-compute them on your computer, run
 ```{r}
 if(!file.exists("Segmentor.models.RData")){
   download.file(
-    "http://members.cbio.ensmp.fr/~thocking/data/Segmentor.models.RData",
+    "http://members.cbio.ensmp.fr/~thocking/change-tutorial/Segmentor.models.RData",
     "Segmentor.models.RData")
 }
 load("Segmentor.models.RData")

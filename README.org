@@ -24,15 +24,16 @@ featureMatrix                   5.064  0.792    5.988
 #+END_EXAMPLE
 - DONE: fixed global variable issues by adding NULL variables.
 
-Check out coarseDataTools::EMforCFR, adapEnetClass, icenReg, and
-non-linear models.
+For a more advanced tutorial, check out coarseDataTools::EMforCFR,
+adapEnetClass, icenReg, and non-linear models.
 
 Package for geom_tallrect / widerect?
 
 Copy and adapt tutorial materials from [[https://github.com/eRum2016/Workshops/blob/master/details/An%2520introduction%2520to%2520changepoint%2520models%2520using%2520R.md][Rebecca's eRum2016 workshop]].
 
-Scripts or Rmds for different steps in the supervised penalty learning
-process.
+** 27 Apr 2017
+
+[[http://members.cbio.mines-paristech.fr/~thocking/change-tutorial/Supervised.html][Compiled Rmd HTML Supervised changepoint tutorial]], first draft, source: [[file:Supervised.Rmd]].
 
 ** 28 Feb 2017
 
