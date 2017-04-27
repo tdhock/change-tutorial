@@ -7,6 +7,14 @@ output:
     toc_depth: 2
 ---
 
+Before starting this tutorial, make sure to install the required packages:
+
+```{r}
+if(interactive()){
+  source("https://raw.githubusercontent.com/tdhock/change-tutorial/master/packages.R")
+}
+```
+
 # What is the difference between unsupervised and supervised changepoint detection?
 
 There are two features of a data set that make it possible to do a
@@ -1255,10 +1263,13 @@ ggplot()+
   theme_bw()+
   theme(panel.margin=grid::unit(0, "lines"))+
   facet_grid(. ~ variable, scales="free")+
+  scale_color_manual(values=model.colors)+
+  guides(color="none")+
   geom_point(aes(
-    value, model.fac),
+    value, model.fac, color=model),
     data=cv.auc.tall)+
-  xlab("")
+  xlab("")+
+  ylab("model")
 ```
 
 It is clear that survreg is significantly more accurate than BIC/SIC,
@@ -1267,12 +1278,19 @@ plotted below.
 
 ```{r}
 ggplot()+
+  scale_color_manual(values=model.colors)+
   geom_path(aes(
-    FPR, TPR, color=model, group=test.fold),
+    FPR, TPR, color=model, group=paste(model, test.fold)),
     data=cv.roc)+
   geom_point(aes(
     FPR, TPR, color=model),
+    fill="white",
+    shape=21,
     data=cv.auc)+
   coord_equal(xlim=c(0, 0.5), ylim=c(0.5, 1))
 ```
 
+**Conclusion:** in labeled data sequences with a common signal/noise
+pattern, supervised learning algorithms can be used to predict penalty
+values and changepoints which are more accurate than unsupervised
+methods (with respect to the labels).
