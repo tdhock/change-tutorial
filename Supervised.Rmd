@@ -288,6 +288,9 @@ following computations:
   for training). The AUC (area under the ROC curve) and the percent
   incorrect labels in the test set can be used to evaluate the
   prediction accuracy of your model.
+  
+The mathematical details are described in
+[our ICML'13 paper, Learning Sparse Penalties for Change-point Detection using Max Margin Interval Regression](http://proceedings.mlr.press/v28/hocking13.html).
 
 ## Changepoints and model selection
 
@@ -489,7 +492,7 @@ zoom.gg.models+
   drawn with a solid black border.
 * **False negatives** are labels with too few predicted changepoints,
   drawn with a dotted black border.
-* **Question** which models are consistent with the labels in your data?
+* **Question:** which models are consistent with the labels in your data?
 
 ## Outputs
 
@@ -694,7 +697,7 @@ six.gg.limits <- ggplot()+
     min.log.lambda="black",
     max.log.lambda="white"))+
   scale_x_continuous(
-    "feature log(log(n))")+
+    "feature")+
   scale_y_continuous(
     "log(penalty)=log(lambda)")
 print(six.gg.limits)
@@ -730,7 +733,12 @@ six.features.targets[, residual := penaltyLearning::targetIntervalResidual(
   cbind(min.log.lambda, max.log.lambda), pred.log.lambda)]
 bic.line.dt <- data.table(
   slope=1, intercept=0, model="BIC/SIC")
+model.colors <- c(
+  "BIC/SIC"="#1B9E77",
+  survreg="#D95F02",
+  IntervalRegressionCV="#7570B3")
 six.gg.bic <- six.gg.limits+
+  scale_color_manual(values=model.colors)+
   geom_abline(aes(
     slope=slope, intercept=intercept, color=model),
     size=1,
@@ -791,20 +799,17 @@ gg.supervised+
   theme(legend.box="horizontal")
 ```
 
-The plot above shows that
+**Question:** discuss with your neighbor for a minute, why are there
+only four false negatives in this plot, but there are five predictions
+outside the target interval in the previous plot with the regression
+line? Hint: look at the plot of the error as a function of penalty.
 
-**Question:** why are there only 
-
-Another way to visualize the predicted penalty values is with the error
-function plot below.
+Another way to visualize the predicted penalty values is with the dots
+in the error function plot below.
 
 ```{r}
 six.BIC.errors <- six.error.list$model.errors[six.BIC.selection, on=list(
   profile.id, chromosome, n.segments), nomatch=0L]
-model.colors <- c(
-  "BIC/SIC"="#1B9E77",
-  survreg="#D95F02",
-  IntervalRegressionCV="#7570B3")
 six.gg.errors.bic <- six.gg.errors+
   geom_point(aes(
     pred.log.lambda, errors, color=model),
@@ -827,7 +832,8 @@ useful for predicting log(penalty) values? In other words, what
 features of a data sequence should be related to the number of
 changepoints we should predict? Change the definition of `feature` in
 `six.BIC.dt` above, and re-do the plots in this section. Using your
-feature, is it possible to learn an affine function with fewer errors?
+feature, is it possible to learn an affine function with fewer errors
+-- are the white and black dots linearly separable?
 
 ## Learning and prediction
 
@@ -871,8 +877,10 @@ six.gg.bic+
     data=six.survreg.res)
 ```
 
-The plot below shows the surrogate loss minimized by the survreg
-function, and the predicted errors.
+The plot below shows the predicted errors and the smooth surrogate
+loss minimized by the gradient descent algorithm implemented by the
+survreg function (gradient descent cannot minimize the non-convex
+error function directly).
 
 ```{r}
 six.survreg.pred[, pred.log.penalty := pred.log.lambda]
@@ -908,8 +916,13 @@ six.gg.errors.survreg <- six.gg.errors.bic+
 print(six.gg.errors.survreg)
 ```
 
-The plot above also shows the surrogate loss that `survreg` minimizes
-using a gradient descent algorithm.
+Note in the plot above:
+
+* four `survreg` predicted penalties achieve 0 error where the BIC/SIC
+  has 1 error. 
+* one BIC/SIC prediction achieves 0 error where `survreg` has 1 error.
+* the smooth surrogate loss is a good approximation of the non-convex
+  error function.
 
 We can also visualize the survreg model predictions by plotting the
 data sequences via the code below.
@@ -948,6 +961,9 @@ gg.supervised+
   theme(legend.box="horizontal")
 ```
 
+The false positive and false negative predictions are evident in the
+plot above.
+
 **Exercise:** the survreg model above assumed a Gaussian distribution
 for the log(penalty) values. Would using another distribution increase
 accuracy? Hint: try `survreg(dist="logistic")`.
@@ -970,17 +986,22 @@ str(train.feature.mat)
 ```
 
 The training set consists of 30 examples, each with 256
-features. Next, we use `IntervalRegressionCV` to fit the regularized
-linear model. If a foreach parallel backend is registered, the
-internal cross-validation loop is performed in parallel. We use
-`set.seed` in order to make the results reproducible (there is
-randomness in the fold assignment in the internal cross-validation
-loop).
+features. Before training, we register a foreach parallel backend (the
+internal cross-validation loop to choose the regularization parameter
+will be computed in parallel).
 
 ```{r}
 if(require(doParallel)){
   registerDoParallel()
 }
+```
+
+We use `set.seed` below in order to make the results reproducible
+(there is randomness in the fold assignment in the internal
+cross-validation loop). Then, we use `IntervalRegressionCV` to fit the
+regularized linear model.
+
+```{r}
 set.seed(1)
 fit.cv <- penaltyLearning::IntervalRegressionCV(
   train.feature.mat, train.target.mat)
@@ -988,7 +1009,7 @@ coef(fit.cv)
 ```
 
 It is clear form the output above that even though the model was
-trained using 256 possible input feature, it has selected only a few
+trained using 256 possible input features, it has selected only a few
 of them to use in the prediction function. We visualize the predicted
 penalty values as dots in the error curve plots below:
 
@@ -1090,12 +1111,17 @@ model.
 
 Since we did not use the chromosome 11 labels to train any of the
 models above, we can use those labels to evaluate the prediction
-accuracy of the learned models. In fact, we have already
-**qualitatively** evaluated the accuracy of the predictions by visual
-inspection of the plots in the last section. However because we have
-labels, we can also **quantitatively** evaluate the prediction
-accuracy by computing the number of incorrect labels and AUC (area
-under the ROC curve).
+accuracy of the learned models. 
+
+* In fact, we have already **qualitatively** evaluated the accuracy of
+  the predictions by visual inspection of the plots in the last
+  section. Qualitative evaluation via visual inspection is also
+  possible in the context of an unlabeled unsupervised changepoint
+  analysis.
+* However because we have labels, we can **quantitatively** evaluate
+  the prediction accuracy by computing the number of incorrect labels
+  and AUC (area under the ROC curve). This is a major advantage of the
+  supervised machine learning approach.
 
 ```{r}
 model.pred.list <- list(
@@ -1273,8 +1299,8 @@ ggplot()+
 ```
 
 It is clear that survreg is significantly more accurate than BIC/SIC,
-and IntervalRegressionCV is slightly more accurate. The ROC curves are
-plotted below.
+and IntervalRegressionCV is slightly more accurate than survreg. The
+ROC curves are plotted below.
 
 ```{r}
 ggplot()+
@@ -1290,7 +1316,14 @@ ggplot()+
   coord_equal(xlim=c(0, 0.5), ylim=c(0.5, 1))
 ```
 
-**Conclusion:** in labeled data sequences with a common signal/noise
-pattern, supervised learning algorithms can be used to predict penalty
-values and changepoints which are more accurate than unsupervised
-methods (with respect to the labels).
+It is clear from the ROC curves above that the BIC/SIC model has a
+relatively low true positive rate (high false negative rate -- many
+breakpoint/positive regions with no predicted changepoints).
+
+**Conclusion:** in **labeled data sequences with a common signal/noise
+pattern**, supervised learning algorithms can be used to predict
+penalty values and changepoints which are **more accurate than
+unsupervised methods**. An advantage of the supervised learning
+approach is that we can **quantitatively evaluate** the learned models
+by counting the number of incorrectly predicted labels in a held-out
+test set.
