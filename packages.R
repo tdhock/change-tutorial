@@ -55,15 +55,19 @@ works_with_R <- function(Rvers,...){
     }
   }
 }
-works_with_R("3.3.3",
-             neuroblastoma="1.0",
-             doParallel="1.0.6",
-             Segmentor3IsBack="2.0",
-             data.table="1.10.4",
-             survival="2.41.2",
-             changepoint="1.0",
-             "tdhock/penaltyLearning@8528b3217fed34d4818a0ce94d7aff5e8cc3bc16",
-             "faizan-khan-iit/ggplot2@5fb99d0cece13239bbbc09c6b8a7da7f86ac58e2",
-             "tdhock/animint@c0db9f34c525bec35c797ccdf8be9564b67c578c",
-             "tdhock/directlabels@dcf34672129bf99a79ddfaceaef73236ae0f696d")
+if(packageVersion("survival") < "2.41.2"){
+  install.packages("survival")
+}
+works_with_R(
+  "3.3.3",
+  neuroblastoma="1.0",
+  doParallel="1.0.6",
+  Segmentor3IsBack="2.0",
+  data.table="1.10.4",
+  survival="2.41.2",
+  changepoint="1.0",
+  "tdhock/penaltyLearning@d2c2f0a0a095742ed5f0aa2385f4e2cf672ab6a7",
+  "faizan-khan-iit/ggplot2@5fb99d0cece13239bbbc09c6b8a7da7f86ac58e2",
+  "tdhock/animint@c0db9f34c525bec35c797ccdf8be9564b67c578c",
+  "tdhock/directlabels@dcf34672129bf99a79ddfaceaef73236ae0f696d")
 registerDoParallel()
