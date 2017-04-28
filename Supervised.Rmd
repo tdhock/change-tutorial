@@ -10,9 +10,8 @@ output:
 Before starting this tutorial, make sure to install the required packages:
 
 ```{r}
-if(interactive()){
-  source("https://raw.githubusercontent.com/tdhock/change-tutorial/master/packages.R")
-}
+source("https://raw.githubusercontent.com/tdhock/change-tutorial/master/packages.R")
+options(width=100)
 ```
 
 # What is the difference between unsupervised and supervised changepoint detection?
@@ -37,7 +36,6 @@ We will use the neuroblastoma data set to explore supervised
 changepoint detection.
 
 ```{r neuroblastoma}
-options(width=100)
 data(neuroblastoma, package="neuroblastoma")
 str(neuroblastoma)
 lapply(neuroblastoma, head, 10)
