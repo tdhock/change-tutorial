@@ -1,3 +1,5 @@
+figure-postCP.pdf: figure-postCP.R
+	R --no-save < $<
 Supervised.html: Supervised.Rmd
 	Rscript -e 'rmarkdown::render("Supervised.Rmd")'
 pelt.models.RData: pelt.models.R Segmentor.models.RData
