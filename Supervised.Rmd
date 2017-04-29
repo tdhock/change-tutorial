@@ -1154,7 +1154,7 @@ ggplot()+
     size=1,
     data=roc)+
   geom_point(aes(
-    FPR, TPR, color=model, linetype=model),
+    FPR, TPR, color=model),
     size=3,
     data=auc)
 ```

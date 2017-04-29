@@ -65,7 +65,7 @@ works_with_R(
   Segmentor3IsBack="2.0",
   data.table="1.10.4",
   survival="2.41.2",
-  changepoint="1.0",
+  changepoint="2.2",
   "tdhock/penaltyLearning@d2c2f0a0a095742ed5f0aa2385f4e2cf672ab6a7",
   "faizan-khan-iit/ggplot2@5fb99d0cece13239bbbc09c6b8a7da7f86ac58e2",
   "tdhock/animint@c0db9f34c525bec35c797ccdf8be9564b67c578c",
