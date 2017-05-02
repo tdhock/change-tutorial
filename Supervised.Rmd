@@ -293,30 +293,65 @@ The mathematical details are described in
 ## Changepoints and model selection
 
 In this section we will begin by computing maximum likelihood Gaussian
-changepoint models using the `Segmentor` function. First a few
-references about the `Segmentor` function:
+changepoint models using the `Segmentor` function.
 
-* it solves the "Segment Neighborhood" problem originally described by
+* Let there be $n$ separate data sequences to segment. For example in
+  the previous section we plotted $n=144$ data sequences, each a
+  separate changepoint detection problem.
+* For any data sequence $i\in\{1,\dots,n\}$, let $d_i$ be the number
+  of data points in data sequence $i$, and let $\mathbf z_i\in\mathbb
+  R^{d_i}$ be the vector of data points to segment for that sequence.
+* The Segment Neighborhood problem with $s$ segments for data sequence
+  $i$ is to find the most likely $s-1$ changepoints:
+$$
+\operatorname{minimize}_{\mathbf m\in\mathbb R^{d_i}}
+\sum_{j=1}^{d_i} \ell(z_{ij}, m_j) 
+\text{subject to}
+\sum_{j=1}^{d_i-1} I(m_{j-1} \neq m_j)=s.
+$$
+For the Normal homoscedastic model we have
+
+* the optimization variable $\mathbf m = (m_1 \cdots m_{d_i})$ is a
+  vector of $d_i$ real-valued segment mean variables.
+* the loss function $\ell$ is the square loss $\ell(z,m)=(z-m)^2$.
+* the indicator function $I$ is 1 for every change-point where
+  $m_{j-1} \neq m_j$, and 0 otherwise.
+* $\lambda>0$ is a non-negative penalty constant.
+* the objective function is the total loss over all $d_i$ data points,
+  which is convex.
+* the constraint is that the mean $\mathbf m$ must have exactly $s-1$
+  changes, which is non-convex.
+* overall the optimization problem is non-convex, which means that
+  gradient-based algorithms can't be used to compute the exact
+  solution. However the dynamic dynamic programming algorithms
+  discussed above can be used to compute the solution in a reasonable 
+
+A few references about the `Segmentor` function:
+
+* the "Segment Neighborhood" problem was originally described by
   [Auger and Lawrence (1989)](https://www.ncbi.nlm.nih.gov/pubmed/2706400). They
-  proposed an $O(S_{\text{max}} n^2)$ algorithm for computing the most
+  proposed an $O(S_{\text{max}} d^2)$ algorithm for computing the most
   likely models with $s\in\{1,\dots,S_{\text{max}}\}$ segments, for
-  $n$ data points. An R implementation of their algorithm is available
+  $d$ data points. An R implementation of their algorithm is available
   as `changepoint::cpt.mean(method="SegNeigh")` but it is very slow
-  for large $n$, due to the quadratic time complexity.
+  for large $d$, due to the quadratic time complexity.
 * [Rigaill (2010) discovered a Pruned Dynamic Programming Algorithm (PDPA)](https://arxiv.org/abs/1004.0887)
   which solves the same "Segment Neighborhood" problem. Its
-  $O(S_{\text{max}}n\log n)$ time complexity makes it much faster for
+  $O(S_{\text{max}}d\log d)$ time complexity makes it much faster for
   larger data sets. The original R implementation `cghseg:::segmeanCO`
   only works for the Gaussian/normal likelihood.
 * [Cleynen et al (2014) generalized the PDPA to other loss/likelihood models](https://almob.biomedcentral.com/articles/10.1186/1748-7188-9-6). Their
-  R function `Segmentor3IsBack::Segmentor` implements the $O(S_{\text{max}}n\log n)$
-  PDPA for Poisson, Normal homoscedastic, Negative Binomial, Normal
-  Heteroscedastic, and Exponential likelihood models.
+  R function `Segmentor3IsBack::Segmentor` implements the
+  $O(S_{\text{max}}d\log d)$ PDPA for Poisson, Normal homoscedastic
+  (uniform variance -- change in mean), Negative Binomial, Normal
+  Heteroscedastic (uniform mean -- change in variance), and
+  Exponential likelihood models.
 
-**Exercise** for the data sequence that you labeled above, compute
-optimal Gaussian changepoint models for 1 to 10 segments using the
-code below. Then create the rest of the figures in this section using
-your labeled data.
+**Exercise** for the data sequence $i$ that you labeled in the
+previous section, compute the Normal homoscedastic Segment
+Neighborhood models for $s\in\{1,\dots,10\}$ segments using the code
+below. Then create the rest of the figures in this section using your
+labeled data.
 
 ```{r}
 max.segments <- 10
@@ -649,8 +684,8 @@ panel in the plot above)
 ## Inputs
 
 To train a machine learning model, we first need to compute a vector
-$x_i\in\mathbb R^p$ of exactly $p$ features for each data sequence
-$i$. We then learn a function $f(x_i)=\log\lambda_i\in\mathbb R$. To
+$\mathbf x_i\in\mathbb R^p$ of exactly $p$ features for each data sequence
+$i$. We then learn a function $f(\mathbf x_i)=\log\lambda_i\in\mathbb R$. To
 compute a feature matrix, use the code below:
 
 ```{r}
@@ -670,11 +705,11 @@ section. For now we will discuss the simpler unsupervised BIC/SIC
 model.
 
 **Example:** The BIC/SIC model selection criterion is $\lambda_i =
-\log n_i$, where $n_i$ is the number of data points to segment in
+\log d_i$, where $d_i$ is the number of data points to segment in
 sequence $i$. Thus in this framework the BIC/SIC criterion is a linear
-model with the feature $x_i=\log\log n_i$ -- this is the column
+model with the feature $\mathbf x_i=\log\log d_i$ -- this is the column
 `n.loglog` of the feature matrix.
-$$f(x_i) = \log\lambda_i = x_i = \log\log n_i$$
+$$f(\mathbf x_i) = \log\lambda_i = \mathbf x_i = \log\log d_i$$
 
 The plot below visualizes the target interval limits in this feature space.
 
@@ -838,7 +873,39 @@ feature, is it possible to learn an affine function with fewer errors
 ### survreg (un-regularized interval regression)
 
 We can use the survival package to learn a more accurate linear model,
-using the same log.log.n feature. To perform a more fair comparison,
+using the same log.log.n feature. The survreg function solves the
+following optimization problem
+$$ 
+\operatorname{minimize}_{
+	\mathbf w\in\mathbb R^p, \beta\in\mathbb R,\sigma\in\mathbb R_+
+	}
+\sum_{i=1}^n -\log[
+F(\overline y_i, \mathbf w^\intercal \mathbf x_i+\beta, \sigma)-
+F(\underline y_i, \mathbf w^\intercal \mathbf x_i+\beta, \sigma)
+],
+$$
+where
+
+* the optimization variables are the coefficients or weight vector
+  $\mathbf w\in\mathbb R^p$, the bias/intercept $\beta\in\mathbb
+  R$, and the scale $\sigma\in\mathbb R_+$.
+* $(\underline y_i,\overline y_i)$ is the target interval of
+  log(penalty) values.
+* $\mathbf x_i\in\mathbb R^p$ is the feature vector for data sequence $i$.
+* $\log\lambda_i= f(\mathbf x_i)=\mathbf w^\intercal \mathbf
+  x_i+\beta$ is the predicted log(penalty) value for data sequence $i$.
+* $F$ is the likelihood: a cumulative distribution function such as
+  the normal, logistic, or Weibull. (specified using the `dist`
+  argument) 
+* The objective function to minimize is the total negative log
+  likelihood, which is convex with respect to the weight vector
+  $\mathbf w$ and the bias/intercept $\beta$, but not jointly convex
+  with respect to the scale parameter $\sigma$. Thus overall the
+  optimization problem is non-convex, meaning that the gradient-based
+  algorithms that `survreg` uses are only guaranteed to reach a local
+  minimum (not the globally most likely model). 
+
+To perform a more fair comparison,
 we will hold out chromosome 11 as a test set, and only train the model
 using the other labeled chromosomes.
 
@@ -863,7 +930,7 @@ six.survreg.res <- six.survreg.pred[six.features.targets, on=list(
   profile.id, chromosome)]
 six.survreg.res[, residual := penaltyLearning::targetIntervalResidual(
   cbind(min.log.lambda, max.log.lambda), pred.log.lambda)]
-six.gg.bic+
+six.gg.survreg <- six.gg.bic+
   geom_abline(aes(
     slope=feature, intercept=`(Intercept)`, color=model),
     size=1,
@@ -873,6 +940,7 @@ six.gg.bic+
     xend=feature, yend=pred.log.lambda-residual,
     color=model),
     data=six.survreg.res)
+print(six.gg.survreg)
 ```
 
 The plot below shows the predicted errors and the smooth surrogate
@@ -964,14 +1032,49 @@ plot above.
 
 **Exercise:** the survreg model above assumed a Gaussian distribution
 for the log(penalty) values. Would using another distribution increase
-accuracy? Hint: try `survreg(dist="logistic")`.
+accuracy? Hint: try re-doing the analyses in this section with the
+`survreg(dist="logistic")` model.
+
+**Exercise:** try re-doing the analyses in this section using
+`penaltyLearning::IntervalRegressionUnregularized`, which learns an
+un-regularized model by minimizing the squared hinge loss with respect
+to the target interval limits. Is there any difference in prediction
+accuracy?
 
 ### IntervalRegressionCV (L1-regularized interval regression)
 
 In the previous sections, we assumed that the log(penalty) is an
 affine function of a given single feature. In this section, we show
 how a multi-variate affine penalty function can be learned using L1
-regularization. This is a machine learning technique that
+regularization. 
+$$ 
+\operatorname{minimize}_{
+	\mathbf w\in\mathbb R^p, \beta\in\mathbb R
+	}
+	\gamma ||\mathbf w||_1 + 
+\sum_{i=1}^n 
+\phi(\mathbf w^\intercal \mathbf x_i+\beta-\underline y_i)+
+\phi(\overline y_i-\mathbf w^\intercal \mathbf x_i-\beta)
+$$
+where
+
+* the data and optimization variables are the same as in the
+  un-regularized interval regression problem described in the previous
+  section (except there is no scale $\sigma$).
+* the hyper-parameter $\gamma>0$ is the degree of L1-regularization
+  (chosen via an internal cross-validation loop).
+* the L1-norm $||\mathbf w||_1=\sum_{j=1}^p |w_j|$ forces some of the
+  $w_j$ weights to be exactly equal to zero (automatic feature
+  selection).
+* $\phi(x)=(x-1)^2I(x<1)$ is the squared hinge loss ($I$ is the
+  indicator function: 1 if the argument is true, and 0 otherwise). 
+* The objective function to minimize is the L1-norm of the weight
+  vector plus the total squared hinge loss (both are convex). Overall
+  the optimization problem is convex, so the global minimum is
+  guaranteed to be found in a reasonable amount of time using
+  gradient-based algorithms.
+
+This is a machine learning technique that
 automatically selects features that result in good prediction
 accuracy. First we create a feature and target matrix for the data in
 the train set:
@@ -991,6 +1094,7 @@ will be computed in parallel).
 ```{r}
 if(require(doParallel)){
   registerDoParallel()
+  options(mc.cores=parallel::detectCores()/2)
 }
 ```
 
@@ -1120,6 +1224,9 @@ accuracy of the learned models.
   the prediction accuracy by computing the number of incorrect labels
   and AUC (area under the ROC curve). This is a major advantage of the
   supervised machine learning approach.
+  
+Below we create a list with an element for each of the three models we
+want to compare. Then we use a `for` loop to go through 
 
 ```{r}
 model.pred.list <- list(
