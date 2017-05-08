@@ -58,16 +58,21 @@ works_with_R <- function(Rvers,...){
 if(packageVersion("survival") < "2.41.2"){
   install.packages("survival")
 }
+r.forge <- "http://r-forge.r-project.org"
+old.repos.vec <- getOption("repos")
+if(!r.forge %in% old.repos.vec){
+  options(repos=c(r.forge, old.repos.vec))
+}
 works_with_R(
   "3.3.3",
   neuroblastoma="1.0",
-  doParallel="1.0.6",
+  doParallel="1.0.9",
   Segmentor3IsBack="2.0",
   data.table="1.10.4",
-  survival="2.41.2",
+  survival=c("2.41.2", "2.41.3"),
   changepoint="2.2",
-  "tdhock/penaltyLearning@d2c2f0a0a095742ed5f0aa2385f4e2cf672ab6a7",
-  "faizan-khan-iit/ggplot2@5fb99d0cece13239bbbc09c6b8a7da7f86ac58e2",
-  "tdhock/animint@c0db9f34c525bec35c797ccdf8be9564b67c578c",
-  "tdhock/directlabels@dcf34672129bf99a79ddfaceaef73236ae0f696d")
+  fpop="2016.10.3",  
+  ggplot2="2.1.0",
+  "tdhock/penaltyLearning@2ba4c3da4851d49ac6938052eb1f0ea23a11a8d0",
+  directlabels="2017.03.31")
 registerDoParallel()

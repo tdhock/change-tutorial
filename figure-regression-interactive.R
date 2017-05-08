@@ -1,4 +1,5 @@
 source("packages.R")
+source("animint.R")
 data(neuroblastoma, package="neuroblastoma")
 load("Segmentor.models.RData")
 selection <-

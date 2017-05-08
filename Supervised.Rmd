@@ -9,7 +9,7 @@ output:
 
 Before starting this tutorial, make sure to install the required packages:
 
-```{r}
+```{r packages}
 source("https://raw.githubusercontent.com/tdhock/change-tutorial/master/packages.R")
 options(width=100)
 ```
@@ -306,27 +306,29 @@ changepoint models using the `Segmentor` function.
 $$
 \operatorname{minimize}_{\mathbf m\in\mathbb R^{d_i}}
 \sum_{j=1}^{d_i} \ell(z_{ij}, m_j) 
-\text{subject to}
-\sum_{j=1}^{d_i-1} I(m_{j-1} \neq m_j)=s.
+\text{ subject to}
+\sum_{j=1}^{d_i-1} I(m_{j} \neq m_{j+1})=s-1.
 $$
+
 For the Normal homoscedastic model we have
 
 * the optimization variable $\mathbf m = (m_1 \cdots m_{d_i})$ is a
   vector of $d_i$ real-valued segment mean variables.
 * the loss function $\ell$ is the square loss $\ell(z,m)=(z-m)^2$.
 * the indicator function $I$ is 1 for every change-point where
-  $m_{j-1} \neq m_j$, and 0 otherwise.
+  $m_{j} \neq m_{j+1}$, and 0 otherwise.
 * $\lambda>0$ is a non-negative penalty constant.
 * the objective function is the total loss over all $d_i$ data points,
   which is convex.
 * the constraint is that the mean $\mathbf m$ must have exactly $s-1$
   changes, which is non-convex.
 * overall the optimization problem is non-convex, which means that
-  gradient-based algorithms can't be used to compute the exact
-  solution. However the dynamic dynamic programming algorithms
-  discussed above can be used to compute the solution in a reasonable 
+  gradient-based algorithms are not guaranteed to compute the global
+  minimum. However the dynamic programming algorithms discussed below
+  can be used to compute the global minimum in a reasonable amount of
+  time.
 
-A few references about the `Segmentor` function:
+A few references about the algorithm implemented in the `Segmentor` function:
 
 * the "Segment Neighborhood" problem was originally described by
   [Auger and Lawrence (1989)](https://www.ncbi.nlm.nih.gov/pubmed/2706400). They
@@ -347,13 +349,13 @@ A few references about the `Segmentor` function:
   Heteroscedastic (uniform mean -- change in variance), and
   Exponential likelihood models.
 
-**Exercise** for the data sequence $i$ that you labeled in the
+**Exercise:** for the data sequence $i$ that you labeled in the
 previous section, compute the Normal homoscedastic Segment
 Neighborhood models for $s\in\{1,\dots,10\}$ segments using the code
 below. Then create the rest of the figures in this section using your
 labeled data.
 
-```{r}
+```{r zoomSegmentor}
 max.segments <- 10
 (fit <- Segmentor3IsBack::Segmentor(
   zoom.pro$logratio, model=2, Kmax=max.segments))
@@ -369,7 +371,7 @@ per segment). The code below is specific to the `Segmentor` function;
 if you use a different changepoint detection package/function, you
 will have to write some other code to tidy the data.
 
-```{r}
+```{r zoomTidy}
 zoom.segs.list <- list()
 zoom.loss.vec <- rep(NA, max.segments)
 for(n.segments in 1:max.segments){
@@ -405,7 +407,7 @@ one row for each model, which we can use with `modelSelection` to
 compute the models that will be selected for every possible penalty
 value. 
 
-```{r}
+```{r zoomSelection}
 zoom.models <- data.frame(
   profile.id=zoom.profile,
   chromosome=zoom.chromosome,
@@ -414,13 +416,17 @@ zoom.models <- data.frame(
   zoom.models, complexity="n.segments"))
 ```
 
-If $\lambda\geq 0$ is the non-negative penalty value, and $L_{i,s}$ 
-is the loss (sum of squared residuals) of the model with $s\in\{1,\dots,s_{\text{max}}\}$
-segments for data sequence $i$, then the model selection function is
+Let $L_{i,s}$ be the loss (sum of squared residuals) of the model with
+$s\in\{1,\dots,s_{\text{max}}\}$ segments for data sequence $i$. The
+model selection function is defined for every non-negative penalty
+$\lambda\geq 0$ as
 
 $$ s_i^*(\lambda) = \text{arg min}_s L_{i,s} + \lambda s $$
+
+We plot the function in the figure below, which shows that it is a
+piecewise constant non-increasing function.
 	
-```{r}
+```{r zoomSelectionPlot}
 ggplot()+
   geom_segment(aes(
     min.lambda, n.segments,
@@ -439,14 +445,17 @@ ggplot()+
   scale_y_continuous(breaks=zoom.selection$n.segments)
 ```
 
-As can be seen from the definition of $s_i^*(\lambda)$ and the figures
-above, a bigger penalty $\lambda$ results in a model with fewer segments/changes (and vice versa). Note that there are some models that are not selected for
-any penalty values (e.g. 3 or 6 segments for this data set).
+The figure above shows the same function in the $\log\lambda$ space
+(which is defined on the entire real line). As can be seen from the
+definition of $s_i^*(\lambda)$ and the figures above, a bigger penalty
+$\lambda$ results in a model with fewer segments/changes (and vice
+versa). Note that there are some models that are not selected for any
+penalty values (e.g. 3 or 6 segments for this data set).
 
 The predicted changepoint positions are every `chromStart` on segments
 after the first:
 
-```{r}
+```{r zoomSegsChanges}
 (zoom.segs <- do.call(rbind, zoom.segs.list[zoom.selection$n.segments]))
 (zoom.changes <- subset(zoom.segs, 1 < start))
 ```
@@ -454,7 +463,7 @@ after the first:
 We use the code below to visualize the models along with the noisy
 data sequence:
 
-```{r}
+```{r zoomPlotdata}
 zoom.gg.models <- zoom.gg.lab+
   theme(
     panel.margin=grid::unit(0, "lines"),
@@ -488,7 +497,7 @@ Next, we compute the number of incorrect labels for each model. The
 * `changes` one row for each predicted changepoint, with a column for
   the predicted changepoint position.
 
-```{r}
+```{r zoomlabelerror}
 zoom.error.list <- penaltyLearning::labelError(
   zoom.selection,
   zoom.labels,
@@ -504,10 +513,10 @@ The result of `labelError` is a list of two data tables:
 * `label.errors` has one row per (sequence,model,label), with the
   fp/fn status of each label.
   
-**Exercise** visualize the false negatives and false positives in the
+**Exercise:** visualize the false negatives and false positives in the
 data set that you labeled, using the code below.
 
-```{r}
+```{r zoomplotlabels}
 zoom.gg.models+
   penaltyLearning::geom_tallrect(aes(
     xmin=min/1e6,
@@ -534,7 +543,11 @@ $e_i(s)\in\{0,1,2,\dots\}$ for this data sequence $i$ and every number of
 segments $s$, we can visualize the label error as function of the
 penalty, $$ E_i(\lambda) = e_i[s^*_i(\lambda)] $$
 
-```{r}
+The code below makes a figure of $E_i(\lambda)$, clearly showing that
+it is a piecewise constant function that takes integer values (like
+the 01 loss in binary classification).
+
+```{r zoomploterrors}
 zoom.errors.tall <- data.table::melt(
   zoom.error.list$model.errors,
   measure.vars=c("n.segments", "errors"))
@@ -555,7 +568,7 @@ print(zoom.gg.errors)
 Below we compute the target interval of penalty values that select
 changepoint models with minimal incorrect labels.
   
-```{r}
+```{r zoomplottargets}
 zoom.target <- penaltyLearning::targetIntervals(
   zoom.error.list$model.errors,
   problem.vars=c("profile.id", "chromosome"))
@@ -590,7 +603,7 @@ The target interval is different for each labeled data sequence. Below
 we compute the target interval for each of the labeled data sequences
 in the six profiles that we showed in the beginning of the tutorial.
   
-```{r}
+```{r sixPlotErrors}
 six.problems.dt <- unique(six.profiles[, list(profile.id, chromosome, status.profile)])
 setkey(six.profiles, profile.id, chromosome)
 six.segs.list <- list()
@@ -688,7 +701,7 @@ $\mathbf x_i\in\mathbb R^p$ of exactly $p$ features for each data sequence
 $i$. We then learn a function $f(\mathbf x_i)=\log\lambda_i\in\mathbb R$. To
 compute a feature matrix, use the code below:
 
-```{r}
+```{r sixFeatureMatrix}
 feature.mat <- penaltyLearning::featureMatrix(
   six.profiles,
   problem.vars=c("profile.id", "chromosome"),
@@ -697,7 +710,7 @@ str(feature.mat)
 ```
 
 The feature matrix is 144 rows (one for each data sequence) by 365
-features. Which features should we use to predict log(penalty) values?
+columns/features. Which features should we use to predict log(penalty) values?
 If you have a lot of labels, you can use
 `penaltyLearning::IntervalRegressionCV` which uses L1-regularization
 to automatically select relevant features -- more details in the next
@@ -706,14 +719,20 @@ model.
 
 **Example:** The BIC/SIC model selection criterion is $\lambda_i =
 \log d_i$, where $d_i$ is the number of data points to segment in
-sequence $i$. Thus in this framework the BIC/SIC criterion is a linear
-model with the feature $\mathbf x_i=\log\log d_i$ -- this is the column
-`n.loglog` of the feature matrix.
-$$f(\mathbf x_i) = \log\lambda_i = \mathbf x_i = \log\log d_i$$
+sequence $i$. In the changepoint package version 2.2 this is
+`penalty="SIC0"`. In this framework the BIC/SIC criterion is a linear
+model with $\beta=0$ and $w=1$ for the feature $\mathbf x_i=\log\log
+d_i$ -- this is the column `n.loglog` of the feature matrix.
+$$\log\lambda_i = f(\mathbf x_i) = \beta + w\log\log d_i$$ This means
+the penalty is $\lambda_i=e^\beta(\log d_i)^w$ in the "optimal
+partitioning" version of the segmentation problem, $$
+\operatorname{minimize}_{\mathbf m\in\mathbb R^{d_i}} \sum_{j=1}^{d_i}
+\ell(z_{ij}, m_j) +e^\beta(\log d_i)^w \sum_{j=1}^{d_i-1} I(m_{j} \neq
+m_{j+1}).  $$
 
 The plot below visualizes the target interval limits in this feature space.
 
-```{r}
+```{r sixLimitsPlot}
 six.BIC.dt <- six.profiles[, list(
   feature=log(log(.N)),
   model="BIC/SIC"
@@ -742,7 +761,7 @@ is below the white dots (upper limits) and above the black dots (lower
 limits). Note that this is not the same problem as binary
 classification, which the plot below makes clear.
 
-```{r}
+```{r sixTargetsPlot}
 six.features.targets <- six.BIC.dt[six.targets, on=list(
   profile.id, chromosome)]
 six.gg.limits+
@@ -761,7 +780,7 @@ In this context we can plot the BIC/SIC model as a line with slope 1
 and intercept 0, and we can visualize its errors using the vertical
 line segments below.
 
-```{r}
+```{r sixBIC}
 six.features.targets[, residual := penaltyLearning::targetIntervalResidual(
   cbind(min.log.lambda, max.log.lambda), pred.log.lambda)]
 bic.line.dt <- data.table(
@@ -840,7 +859,7 @@ line? Hint: look at the plot of the error as a function of penalty.
 Another way to visualize the predicted penalty values is with the dots
 in the error function plot below.
 
-```{r}
+```{r six-gg-errors-bic}
 six.BIC.errors <- six.error.list$model.errors[six.BIC.selection, on=list(
   profile.id, chromosome, n.segments), nomatch=0L]
 six.gg.errors.bic <- six.gg.errors+
@@ -859,9 +878,22 @@ It is clear from the plot above that
   labeled regions.
 * Some of the penalty values occur where the error function is
   non-zero. These are prediction errors with respect to the labels.
+  
+**Exercise (easy):** In the changepoint package version 2.2
+`penalty="SIC0"`means $\lambda_i = \log d_i$ (same as the BIC/SIC we
+explored in this section). Use the `changepoint::cpt.mean` function to
+compute the optimal changepoints for one of the neuroblastoma data
+sequences. Verify that the penalty and changepoints are the same as we
+computed above.
 
-**Exercise:** can you think of any other features which would be
-useful for predicting log(penalty) values? In other words, what
+**Exercise (medium):** In the changepoint package version 2.2
+`penalty="SIC"`means $\lambda_i = 2\log d_i$ (twice as much penalty as
+the BIC/SIC in this section). What is the slope/intercept of this
+model in the same feature space? Re-do the plots in this section. Is
+the model more or less accurate?
+
+**Exercise (hard):** can you think of any other features which would
+be useful for predicting log(penalty) values? In other words, what
 features of a data sequence should be related to the number of
 changepoints we should predict? Change the definition of `feature` in
 `six.BIC.dt` above, and re-do the plots in this section. Using your
@@ -870,25 +902,49 @@ feature, is it possible to learn an affine function with fewer errors
 
 ## Learning and prediction
 
+In the previous section we explored the unsupervised BIC/SIC penalty,
+which uses 1 feature, and does not learn any parameters using the
+labels. In this section, we will explain two supervised penalty
+learning methods that can be used to increase changepoint detection
+accuracy.
+
 ### survreg (un-regularized interval regression)
 
-We can use the survival package to learn a more accurate linear model,
-using the same log.log.n feature. The survreg function solves the
-following optimization problem
-$$ 
-\operatorname{minimize}_{
-	\mathbf w\in\mathbb R^p, \beta\in\mathbb R,\sigma\in\mathbb R_+
-	}
-\sum_{i=1}^n -\log[
-F(\overline y_i, \mathbf w^\intercal \mathbf x_i+\beta, \sigma)-
-F(\underline y_i, \mathbf w^\intercal \mathbf x_i+\beta, \sigma)
-],
+We begin by using the same feature as the BIC/SIC penalty, but
+relaxing the assumption that the intercept $\beta=0$ and slope
+$w=1$. Instead of taking these parameter values for granted based on
+the theoretical arguments of the BIC/SIC penalty, we can use the
+`survival::survreg` function to optimize these parameters based on the
+labels. The penalty function is
+$\log\lambda_i = f(\mathbf x_i) = \beta + w\log\log
+d_i$ which is equivalent to solving the following penalized
+changepoint detection problem, $$
+\operatorname{minimize}_{\mathbf m\in\mathbb R^{d_i}}
+\sum_{j=1}^{d_i}
+\ell(z_{ij}, m_j) 
++e^\beta(\log d_i)^w 
+\sum_{j=1}^{d_i-1} 
+I(m_{j} \neq m_{j+1}),
 $$
-where
+where the intercept $\beta$ and the slope $w$ 
+are defined as the solution to the following optimization
+problem, $$ \operatorname{minimize}_{ 
+\mathbf w\in\mathbb R^p,
+\beta\in\mathbb R,
+\sigma\in\mathbb R_+ 
+}
+\sum_{i=1}^n
+-\log[ 
+F(\overline y_i, \mathbf w^\intercal \mathbf x_i+\beta, \sigma)- 
+F(\underline y_i, \mathbf w^\intercal \mathbf x_i+\beta, \sigma) 
+],
+$$ where
 
 * the optimization variables are the coefficients or weight vector
-  $\mathbf w\in\mathbb R^p$, the bias/intercept $\beta\in\mathbb
-  R$, and the scale $\sigma\in\mathbb R_+$.
+  $\mathbf w\in\mathbb R^p$, the bias/intercept $\beta\in\mathbb R$,
+  and the scale $\sigma\in\mathbb R_+$. In this section for the
+  BIC/SIC penalty we have $p=1$ feature, but `survreg` can be used
+  with more features.
 * $(\underline y_i,\overline y_i)$ is the target interval of
   log(penalty) values.
 * $\mathbf x_i\in\mathbb R^p$ is the feature vector for data sequence $i$.
@@ -909,7 +965,7 @@ To perform a more fair comparison,
 we will hold out chromosome 11 as a test set, and only train the model
 using the other labeled chromosomes.
 
-```{r}
+```{r fit-survreg}
 library(survival)
 train.dt <- six.features.targets[chromosome!=11]
 (fit.survreg <- survreg(
@@ -921,7 +977,7 @@ It is clear that the coefficients of the learned model are different
 from the BIC/SIC model. We can visualize the regression line in the
 feature space via the code below:
 
-```{r}
+```{r six-gg-survreg}
 survreg.line.dt <- data.table(t(coef(fit.survreg)), model="survreg")
 six.survreg.pred <- data.table(six.BIC.dt)
 six.survreg.pred[, model := "survreg"]
@@ -948,7 +1004,7 @@ loss minimized by the gradient descent algorithm implemented by the
 survreg function (gradient descent cannot minimize the non-convex
 error function directly).
 
-```{r}
+```{r six-gg-errors-survreg}
 six.survreg.pred[, pred.log.penalty := pred.log.lambda]
 six.survreg.selection <- data.table(six.selection)[six.survreg.pred, on=list(
   profile.id, chromosome,
@@ -1030,12 +1086,22 @@ gg.supervised+
 The false positive and false negative predictions are evident in the
 plot above.
 
-**Exercise:** the survreg model above assumed a Gaussian distribution
+**Exercise (easy):** the survreg model above assumed a Gaussian distribution
 for the log(penalty) values. Would using another distribution increase
 accuracy? Hint: try re-doing the analyses in this section with the
 `survreg(dist="logistic")` model.
 
-**Exercise:** try re-doing the analyses in this section using
+**Exercise (medium):** for one of the neuroblastoma data sequences
+plotted above, verify that `changepoint::cpt.mean(data.vec,
+penalty="Manual", pen.value=PREDICTED.PENALTY, method="PELT")` and
+`fpop::Fpop(data.vec, lambda=PREDICTED.PENALTY)` yield the same
+changepoints. Fpop implements a "functional pruning optimal
+partitioning" algorithm which is guaranteed to prune more sub-optimal
+changepoints (i.e. be faster than) the PELT algorithm. Read
+[On optimal multiple changepoint algorithms for large data](http://link.springer.com/article/10.1007/s11222-016-9636-3)
+for more info.
+
+**Exercise (hard):** try re-doing the analyses in this section using
 `penaltyLearning::IntervalRegressionUnregularized`, which learns an
 un-regularized model by minimizing the squared hinge loss with respect
 to the target interval limits. Is there any difference in prediction
@@ -1046,26 +1112,39 @@ accuracy?
 In the previous sections, we assumed that the log(penalty) is an
 affine function of a given single feature. In this section, we show
 how a multi-variate affine penalty function can be learned using L1
-regularization. 
-$$ 
-\operatorname{minimize}_{
-	\mathbf w\in\mathbb R^p, \beta\in\mathbb R
-	}
-	\gamma ||\mathbf w||_1 + 
-\sum_{i=1}^n 
-\phi(\mathbf w^\intercal \mathbf x_i+\beta-\underline y_i)+
-\phi(\overline y_i-\mathbf w^\intercal \mathbf x_i-\beta)
+regularization. The penalty function we learn is $\log\lambda_i =
+f(\mathbf x_i) = \beta + \mathbf w^\intercal x_i$ 
+which is equivalent to solving the
+following penalized changepoint detection problem,
 $$
-where
+\operatorname{minimize}_{\mathbf m\in\mathbb R^{d_i}} 
+\sum_{j=1}^{d_i}
+\ell(z_{ij}, m_j) +
+\exp(\beta+\mathbf w^\intercal \mathbf x_i)
+\sum_{j=1}^{d_i-1} 
+I(m_{j} \neq m_{j+1}), 
+$$ 
+where the intercept $\beta$ and the weight vector $w$ are defined
+as the solution to the following optimization problem, 
+$$
+\operatorname{minimize}_{ \mathbf w\in\mathbb R^p, \beta\in\mathbb R }
+\gamma ||\mathbf w||_1 +
+\sum_{i=1}^n 
+\phi(\mathbf w^\intercal \mathbf x_i+\beta-\underline y_i)+ 
+\phi(\overline y_i-\mathbf w^\intercal \mathbf x_i-\beta) 
+$$ where
 
 * the data and optimization variables are the same as in the
   un-regularized interval regression problem described in the previous
   section (except there is no scale $\sigma$).
+* the L1-norm $||\mathbf w||_1=\sum_{j=1}^p |w_j|$ is a regularization
+  term which is to avoid overfitting. It forces some of the $w_j$
+  weights to be exactly equal to zero (feature selection).
 * the hyper-parameter $\gamma>0$ is the degree of L1-regularization
-  (chosen via an internal cross-validation loop).
-* the L1-norm $||\mathbf w||_1=\sum_{j=1}^p |w_j|$ forces some of the
-  $w_j$ weights to be exactly equal to zero (automatic feature
-  selection).
+  (chosen via an internal cross-validation loop). This means that the
+  model performs automatic feature selection. You can thus use as many
+  features $p$ as you want, and the model will automatically ignore
+  any which do not increase prediction accuracy.
 * $\phi(x)=(x-1)^2I(x<1)$ is the squared hinge loss ($I$ is the
   indicator function: 1 if the argument is true, and 0 otherwise). 
 * The objective function to minimize is the L1-norm of the weight
@@ -1079,7 +1158,7 @@ automatically selects features that result in good prediction
 accuracy. First we create a feature and target matrix for the data in
 the train set:
 
-```{r}
+```{r train-feature-mat}
 finite.feature.mat <- feature.mat[, apply(is.finite(feature.mat), 2, all)]
 train.feature.mat <- train.dt[, finite.feature.mat[paste(profile.id, chromosome),] ]
 train.target.mat <- train.dt[, cbind(min.log.lambda, max.log.lambda)]
@@ -1091,7 +1170,7 @@ features. Before training, we register a foreach parallel backend (the
 internal cross-validation loop to choose the regularization parameter
 will be computed in parallel).
 
-```{r}
+```{r require-doParallel}
 if(require(doParallel)){
   registerDoParallel()
   options(mc.cores=parallel::detectCores()/2)
@@ -1103,7 +1182,7 @@ We use `set.seed` below in order to make the results reproducible
 cross-validation loop). Then, we use `IntervalRegressionCV` to fit the
 regularized linear model.
 
-```{r}
+```{r fit-cv}
 set.seed(1)
 fit.cv <- penaltyLearning::IntervalRegressionCV(
   train.feature.mat, train.target.mat)
@@ -1115,7 +1194,7 @@ trained using 256 possible input features, it has selected only a few
 of them to use in the prediction function. We visualize the predicted
 penalty values as dots in the error curve plots below:
 
-```{r}
+```{r six-gg-errors-cv}
 six.cv.pred <- data.table(six.survreg.pred)
 six.cv.pred[, pred.log.penalty := {
   pred.feat.mat <- finite.feature.mat[paste(profile.id, chromosome), ]
@@ -1131,15 +1210,11 @@ six.cv.errors <- six.error.list$model.errors[six.cv.selection, on=list(
   profile.id, chromosome, n.segments), nomatch=0L]
 six.cv.surrogate <- six.survreg.res[, {
   ## IntervalRegressionCV minimizes the squared hinge loss.
-  squared.hinge <- function(x){
-    ifelse(x<1,(x-1)^2,0)
-  }
   data.table(
     model="IntervalRegressionCV",
     log.penalty=log.pen.vec,
-    surrogate.loss=squared.hinge(
-      log.pen.vec-min.log.lambda)+squared.hinge(
-        max.log.lambda-log.pen.vec)
+    surrogate.loss=penaltyLearning::squared.hinge(log.pen.vec-min.log.lambda)+
+      penaltyLearning::squared.hinge(max.log.lambda-log.pen.vec)
   )[surrogate.loss < ymax.err]
 }, by=list(profile.id, chromosome)]
 six.gg.errors.survreg+
@@ -1228,7 +1303,7 @@ accuracy of the learned models.
 Below we create a list with an element for each of the three models we
 want to compare. Then we use a `for` loop to go through 
 
-```{r}
+```{r six-auc}
 model.pred.list <- list(
   IntervalRegressionCV=six.cv.pred,
   "BIC/SIC"=six.BIC.dt,
@@ -1253,7 +1328,7 @@ respect to the labels in the test data (chromosome 11). It is clear
 that the IntervalRegressionCV is slightly more accurate (higher auc
 and lower errors). The ROC curves are shown below:
 
-```{r}
+```{r six-gg-roc}
 ggplot()+
   scale_color_manual(values=model.colors)+
   geom_path(aes(
@@ -1287,7 +1362,7 @@ sequences), we have pre-computed the Segmentor models, which we load
 using the code below. (to re-compute them on your computer, run
 [Segmentor.models.R](https://github.com/tdhock/change-tutorial/blob/master/Segmentor.models.R))
 
-```{r}
+```{r load-Segmentor-models}
 if(!file.exists("Segmentor.models.RData")){
   download.file(
     "http://members.cbio.ensmp.fr/~thocking/change-tutorial/Segmentor.models.RData",
@@ -1299,7 +1374,7 @@ load("Segmentor.models.RData")
 Before performing cross-validation, we can compute the error
 functions, features and target intervals for all of the labeled data.
 
-```{r}
+```{r labeled-feature-mat}
 nb.selection <- Segmentor.models$loss[, penaltyLearning::modelSelection(
   .SD, complexity="n.segments"), by=list(
     profile.id, chromosome)]
@@ -1325,7 +1400,7 @@ labeled.feature.mat <- penaltyLearning::featureMatrix(
 Rather than training on all features (which is possible but takes a
 bit too long for this tutorial), we will just use the following subset:
 
-```{r}
+```{r some-feature-names}
 (some.feature.names <- c(
   colnames(labeled.feature.mat)[1:5],
   rownames(coef(fit.cv))[-1]))
@@ -1333,7 +1408,7 @@ bit too long for this tutorial), we will just use the following subset:
 
 Next we assign folds to targets,
 
-```{r}
+```{r nb-target-dt}
 set.seed(1)
 n.folds <- 5
 nb.target.dt[, fold := sample(rep(1:n.folds, l=.N))]
@@ -1341,7 +1416,7 @@ nb.target.dt[, fold := sample(rep(1:n.folds, l=.N))]
 
 Then we loop over test folds,
 
-```{r}
+```{r cv-auc-list}
 cv.roc.list <- list()
 cv.auc.list <- list()
 for(test.fold in 1:n.folds){
@@ -1407,7 +1482,7 @@ It is clear that survreg is significantly more accurate than BIC/SIC,
 and IntervalRegressionCV is slightly more accurate than survreg. The
 ROC curves are plotted below.
 
-```{r}
+```{r cv-roc-curves}
 ggplot()+
   scale_color_manual(values=model.colors)+
   geom_path(aes(
