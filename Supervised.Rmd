@@ -81,10 +81,10 @@ followup$status.profile <- with(followup, paste(status, profile.id))
 some.ids <- rownames(followup)
 library(data.table)
 someProfiles <- function(all.profiles){
-  some <- subset(all.profiles, profile.id %in% some.ids)
+  some <- subset(all.profiles, paste(profile.id) %in% some.ids)
   status.profile <- followup[paste(some$profile.id), "status.profile"]
   some$status.profile <- ifelse(
-    is.na(status.profile), some$profile.id, status.profile)
+    is.na(status.profile), paste(some$profile.id), status.profile)
   data.table(some)
 }
 six.profiles <- someProfiles(neuroblastoma$profiles)
@@ -963,9 +963,8 @@ $$ where
 * $\mathbf x_i\in\mathbb R^p$ is the feature vector for data sequence $i$.
 * $\log\lambda_i= f(\mathbf x_i)=\mathbf w^\intercal \mathbf
   x_i+\beta$ is the predicted log(penalty) value for data sequence
-  $i$. The `survreg` Normal model is $
-  \log \lambda_i \sim N(\mathbf w^\intercal \mathbf x_i+\beta, \sigma^2)
-  $.
+  $i$. The `survreg` Normal model is $\log \lambda_i
+  \sim N(\mathbf w^\intercal \mathbf x_i+\beta, \sigma^2)$.
 * $F$ is the likelihood: a cumulative distribution function such as
   the normal, logistic, or Weibull. (specified using the `dist`
   argument) 
