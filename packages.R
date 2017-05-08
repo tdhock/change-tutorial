@@ -73,6 +73,6 @@ works_with_R(
   changepoint="2.2.2",
   fpop="2016.10.18",  
   ggplot2="2.1.0",
-  "tdhock/penaltyLearning@122d7edcb073060a5e9a1f5ed8250717c7e3596f",
+  "tdhock/penaltyLearning@cd865e1bc1537268d51575b4a555673b1129a964",
   directlabels="2017.3.31")
 plan(multiprocess)
