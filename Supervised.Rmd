@@ -721,13 +721,14 @@ model.
 \log d_i$, where $d_i$ is the number of data points to segment in
 sequence $i$. In the changepoint package version 2.2 this is
 `penalty="SIC0"`. In this framework the BIC/SIC criterion is a linear
-model with $\beta=0$ and $w=1$ for the feature $\mathbf x_i=\log\log
+model with $\beta=0$ and $w=1$ for $p=1$ feature, $\mathbf x_i=\log\log
 d_i$ -- this is the column `n.loglog` of the feature matrix.
-$$\log\lambda_i = f(\mathbf x_i) = \beta + w\log\log d_i$$ This means
-the penalty is $\lambda_i=e^\beta(\log d_i)^w$ in the "optimal
+$$\log\lambda_i = f(\mathbf x_i) = \beta + w\log\log d_i = 0 + 1\log\log d_i$$
+This means
+the penalty is $\lambda_i=\log d_i in the "optimal
 partitioning" version of the segmentation problem, $$
 \operatorname{minimize}_{\mathbf m\in\mathbb R^{d_i}} \sum_{j=1}^{d_i}
-\ell(z_{ij}, m_j) +e^\beta(\log d_i)^w \sum_{j=1}^{d_i-1} I(m_{j} \neq
+\ell(z_{ij}, m_j) +\log d_i \sum_{j=1}^{d_i-1} I(m_{j} \neq
 m_{j+1}).  $$
 
 The plot below visualizes the target interval limits in this feature space.
@@ -1113,7 +1114,7 @@ In the previous sections, we assumed that the log(penalty) is an
 affine function of a given single feature. In this section, we show
 how a multi-variate affine penalty function can be learned using L1
 regularization. The penalty function we learn is $\log\lambda_i =
-f(\mathbf x_i) = \beta + \mathbf w^\intercal x_i$ 
+f(\mathbf x_i) = \beta + \mathbf w^\intercal \mathbf x_i$ 
 which is equivalent to solving the
 following penalized changepoint detection problem,
 $$
