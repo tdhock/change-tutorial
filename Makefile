@@ -2,7 +2,7 @@ Supervised.html: Supervised.Rmd
 	Rscript -e 'rmarkdown::render("Supervised.Rmd")'
 figure-postCP.pdf: figure-postCP.R
 	R --no-save < $<
-pelt.models.RData: pelt.models.R Segmentor.models.RData
+pelt.fpop.RData: pelt.fpop.R Segmentor.models.RData
 	R --no-save < $<
 figure-regression-interactive/index.html: figure-regression-interactive.R
 	R --no-save < $<

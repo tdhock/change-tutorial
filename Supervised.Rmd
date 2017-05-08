@@ -13,7 +13,7 @@ Before starting this tutorial, make sure to install the required packages:
 source("https://raw.githubusercontent.com/tdhock/change-tutorial/master/packages.R")
 options(width=100)
 ```
-
+ 
 # What is the difference between unsupervised and supervised changepoint detection?
 
 There are two features of a data set that make it possible to do a
