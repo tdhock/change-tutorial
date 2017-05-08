@@ -717,19 +717,23 @@ to automatically select relevant features -- more details in the next
 section. For now we will discuss the simpler unsupervised BIC/SIC
 model.
 
-**Example:** The BIC/SIC model selection criterion is $\lambda_i =
+**Example:** The BIC/SIC penalty is $\lambda_i =
 \log d_i$, where $d_i$ is the number of data points to segment in
 sequence $i$. In the changepoint package version 2.2 this is
 `penalty="SIC0"`. In this framework the BIC/SIC criterion is a linear
-model with $\beta=0$ and $w=1$ for $p=1$ feature, $\mathbf x_i=\log\log
-d_i$ -- this is the column `n.loglog` of the feature matrix.
-$$\log\lambda_i = f(\mathbf x_i) = \beta + w\log\log d_i = 0 + 1\log\log d_i$$
-This means
-the penalty is $\lambda_i=\log d_i in the "optimal
-partitioning" version of the segmentation problem, $$
+model 
+$f(\mathbf x_i)=\mathbf w^\intercal \mathbf x_i + \beta$
+with intercept $\beta=0$ and slope $w=1$ for $p=1$ feature, $\mathbf x_i=\log\log
+d_i$ -- this is the column `n.loglog` of the feature matrix. 
+The BIC/SIC log penalty is
+$$\log\lambda_i = f(\mathbf x_i) = \beta + w\log\log d_i = \log\log d_i$$
+This is equivalent to solving the following penalized
+changepoint detection problem,
+$$
 \operatorname{minimize}_{\mathbf m\in\mathbb R^{d_i}} \sum_{j=1}^{d_i}
-\ell(z_{ij}, m_j) +\log d_i \sum_{j=1}^{d_i-1} I(m_{j} \neq
-m_{j+1}).  $$
+\ell(z_{ij}, m_j) +\underbrace{(\log d_i)}_{\lambda_i} \sum_{j=1}^{d_i-1} I(m_{j} \neq
+m_{j+1}).
+$$
 
 The plot below visualizes the target interval limits in this feature space.
 
@@ -852,6 +856,14 @@ gg.supervised+
   theme(legend.box="horizontal")
 ```
 
+**Remark:** the result above (BIC/SIC predicts too few changepoints,
+resulting in false negatives) is specific to the neuroblastoma data
+set. However, in general you can expect that unsupervised penalty
+functions will commit changepoint detection errors which are visually
+obvious. This is the main motivation of supervised changepoint
+analysis: we can use labels to learn a penalty function with improved
+changepoint detection accuracy.
+
 **Question:** discuss with your neighbor for a minute, why are there
 only four false negatives in this plot, but there are five predictions
 outside the target interval in the previous plot with the regression
@@ -923,7 +935,7 @@ changepoint detection problem, $$
 \operatorname{minimize}_{\mathbf m\in\mathbb R^{d_i}}
 \sum_{j=1}^{d_i}
 \ell(z_{ij}, m_j) 
-+e^\beta(\log d_i)^w 
++\underbrace{e^\beta(\log d_i)^w }_{\lambda_i}
 \sum_{j=1}^{d_i-1} 
 I(m_{j} \neq m_{j+1}),
 $$
@@ -1121,7 +1133,7 @@ $$
 \operatorname{minimize}_{\mathbf m\in\mathbb R^{d_i}} 
 \sum_{j=1}^{d_i}
 \ell(z_{ij}, m_j) +
-\exp(\beta+\mathbf w^\intercal \mathbf x_i)
+\underbrace{\exp(\beta+\mathbf w^\intercal \mathbf x_i)}_{\lambda_i}
 \sum_{j=1}^{d_i-1} 
 I(m_{j} \neq m_{j+1}), 
 $$ 
@@ -1167,14 +1179,14 @@ str(train.feature.mat)
 ```
 
 The training set consists of 30 examples, each with 256
-features. Before training, we register a foreach parallel backend (the
-internal cross-validation loop to choose the regularization parameter
-will be computed in parallel).
+features. Before training, we register the multiprocess future plan
+(the internal cross-validation loop to choose the regularization
+parameter will be computed in parallel).
 
-```{r require-doParallel}
-if(require(doParallel)){
-  registerDoParallel()
+```{r require-future}
+if(require(future)){
   options(mc.cores=parallel::detectCores()/2)
+  plan(multiprocess)
 }
 ```
 
@@ -1479,9 +1491,20 @@ ggplot()+
   ylab("model")
 ```
 
-It is clear that survreg is significantly more accurate than BIC/SIC,
-and IntervalRegressionCV is slightly more accurate than survreg. The
-ROC curves are plotted below.
+It is clear from the plot above that survreg is significantly more accurate than BIC/SIC,
+and IntervalRegressionCV is slightly more accurate than survreg. 
+
+**Remark:** the accuracy rates above (BIC/SIC predicts 92% correct
+labels whereas survreg and IntervalRegressionCV predict 97-98% correct
+labels) are specific to the neuroblastoma data set. However, in
+general you can expect that unsupervised penalty functions like
+BIC/SIC will be less accurate than supervised methods such as
+IntervalRegressionCV. This is the main motivation of supervised
+changepoint analysis: we can use labels to learn a penalty function
+with improved changepoint detection accuracy.
+
+We can also plot the ROC curves, to visualize what kinds of errors the
+models commit (false positives or false negatives).
 
 ```{r cv-roc-curves}
 ggplot()+
@@ -1499,7 +1522,7 @@ ggplot()+
 
 It is clear from the ROC curves above that the BIC/SIC model has a
 relatively low true positive rate (high false negative rate -- many
-breakpoint/positive regions with no predicted changepoints).
+breakpoint/positive labels with no predicted changepoints).
 
 **Conclusion:** in **labeled data sequences with a common signal/noise
 pattern**, supervised learning algorithms can be used to predict

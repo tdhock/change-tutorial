@@ -66,13 +66,13 @@ if(!r.forge %in% old.repos.vec){
 works_with_R(
   "3.3.3",
   neuroblastoma="1.0",
-  doParallel="1.0.9",
+  future="1.0.1",
   Segmentor3IsBack="2.0",
   data.table="1.10.4",
   survival=c("2.41.2", "2.41.3"),
-  changepoint="2.2",
-  fpop="2016.10.3",  
+  changepoint="2.2.2",
+  fpop="2016.10.18",  
   ggplot2="2.1.0",
-  "tdhock/penaltyLearning@2ba4c3da4851d49ac6938052eb1f0ea23a11a8d0",
-  directlabels="2017.03.31")
-registerDoParallel()
+  "tdhock/penaltyLearning@122d7edcb073060a5e9a1f5ed8250717c7e3596f",
+  directlabels="2017.3.31")
+plan(multiprocess)
