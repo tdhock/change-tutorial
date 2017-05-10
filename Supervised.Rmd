@@ -508,10 +508,14 @@ str(zoom.error.list)
 
 The result of `labelError` is a list of two data tables:
 
-* `model.errors` has one row per (sequence,model), with the total number
-  of incorrect labels.
+* `model.errors` has one row per (sequence,model), with the total
+  number of incorrect labels. This is used as the input for the next
+  step (computing a target interval of penalty values which achieves
+  minimum incorrect labels for each data sequence).
 * `label.errors` has one row per (sequence,model,label), with the
-  fp/fn status of each label.
+  fp/fn status of each label. This can be used to visualize false
+  negative and false positive predictions in particular data
+  sequences.
   
 **Exercise:** visualize the false negatives and false positives in the
 data set that you labeled, using the code below.
@@ -524,10 +528,10 @@ zoom.gg.models+
     linetype=status),
     data=zoom.error.list$label.errors,
     fill=NA)+
-    scale_linetype_manual("error type", values=c(
-      correct=0,
-      "false negative"=3,
-      "false positive"=1))
+  scale_linetype_manual("error type", values=c(
+    correct=0,
+    "false negative"=3,
+    "false positive"=1))
 ```
 
 * **False positives** are labels with too many predicted changepoints,
@@ -538,10 +542,11 @@ zoom.gg.models+
 
 ## Outputs
 
-Now that we have computed the number of incorrect labels
-$e_i(s)\in\{0,1,2,\dots\}$ for this data sequence $i$ and every number of
-segments $s$, we can visualize the label error as function of the
-penalty, $$ E_i(\lambda) = e_i[s^*_i(\lambda)] $$
+Now that we have computed `zoom.error.list$model.errors` which
+contains the number of incorrect labels $e_i(s)\in\{0,1,2,\dots\}$ for
+this data sequence $i$ and every number of segments $s$, we can
+visualize the label error as function of the penalty, $$ E_i(\lambda)
+= e_i[s^*_i(\lambda)] $$
 
 The code below makes a figure of $E_i(\lambda)$, clearly showing that
 it is a piecewise constant function that takes integer values (like
@@ -565,8 +570,9 @@ zoom.gg.errors <- ggplot()+
 print(zoom.gg.errors)
 ```
 
-Below we compute the target interval of penalty values that select
-changepoint models with minimal incorrect labels.
+Below we compute the output for the machine learning problem, a target
+interval of penalty values that yield changepoint models with minimal
+incorrect labels.
   
 ```{r zoomplottargets}
 zoom.target <- penaltyLearning::targetIntervals(
