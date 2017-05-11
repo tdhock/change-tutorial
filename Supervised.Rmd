@@ -605,12 +605,16 @@ output in the machine learning problem:
   larger log(penalty) is predicted, then there are too few
   changepoints (false negatives).
   
-The target interval is different for each labeled data sequence. Below
-we compute the target interval for each of the labeled data sequences
-in the six profiles that we showed in the beginning of the tutorial.
+The target interval is different for each labeled data sequence. We
+will show that by computing the target interval for each of the
+labeled data sequences in the six profiles that we showed in the
+beginning of the tutorial. The first step is to compute changepoints
+and model selection functions, which we do via a for loop over each
+data sequence below. 
   
-```{r sixPlotErrors}
-six.problems.dt <- unique(six.profiles[, list(profile.id, chromosome, status.profile)])
+```{r sixSegmentor}
+six.problems.dt <- unique(six.profiles[, list(
+  profile.id, chromosome, status.profile)])
 setkey(six.profiles, profile.id, chromosome)
 six.segs.list <- list()
 six.selection.list <- list()
@@ -618,7 +622,8 @@ for(problem.i in 1:nrow(six.problems.dt)){
   meta <- six.problems.dt[problem.i,]
   pro <- six.profiles[meta]
   max.segments <- min(nrow(pro), 10)
-  fit <- Segmentor3IsBack::Segmentor(pro$logratio, model=2, Kmax=max.segments)
+  fit <- Segmentor3IsBack::Segmentor(
+    pro$logratio, model=2, Kmax=max.segments)
   rss.vec <- rep(NA, max.segments)
   for(n.segments in 1:max.segments){
     end <- fit@breaks[n.segments, 1:n.segments]
@@ -648,10 +653,27 @@ for(problem.i in 1:nrow(six.problems.dt)){
   six.selection.list[[problem.i]] <- penaltyLearning::modelSelection(
     loss.dt, complexity="n.segments")
 }
-
 six.selection <- do.call(rbind, six.selection.list)
 six.segs <- do.call(rbind, six.segs.list)
 six.changes <- six.segs[1 < start]
+```
+
+Inside of each iteration of the loop above, we used
+
+* `Segmentor3IsBack::Segmentor` to compute the optimal changepoint
+  models, saving the tidy result data.frame of segments to an element
+  of `six.segs.list`.
+* `penaltyLearning::modelSelection` to compute the model selection
+  functions, saving the result to an element of `six.selection.list`.
+
+Below, we use 
+
+* `penaltyLearning::labelError` to compute the number of incorrect
+  labels for each segmentation model.
+* `penaltyLearning::targetIntervals` to compute the target interval
+  of penalty values for each labeled data sequence.
+
+```{r sixPlotErrors}
 six.error.list <- penaltyLearning::labelError(
   six.selection, six.labels, six.changes,
   problem.vars=c("profile.id", "chromosome"))
@@ -667,7 +689,13 @@ six.targets.tall <- data.table::melt(
 six.gg.errors <- ggplot()+
   theme_bw()+
   theme(panel.margin=grid::unit(0, "lines"))+
-  facet_grid(profile.id ~ chromosome)+
+  facet_grid(profile.id ~ chromosome, labeller=function(df){
+    if("chromosome" %in% names(df))
+      df$chromosome <- paste0("chr", df$chromosome)
+    if("profile.id" %in% names(df))
+      df$profile.id <- paste("profile", df$profile.id)
+    df
+  })+
   geom_segment(aes(
     min.log.lambda, errors,
     xend=max.log.lambda, yend=errors),
@@ -693,8 +721,12 @@ six.gg.errors <- ggplot()+
 print(six.gg.errors)
 ```
 
-It is clear from the plot above that a model with minimal incorrect
-labels will predict a different penalty for each data sequence. 
+The plot above shows the error function and target intervals for each
+labeled data sequence. Each column of panels/facets represents a
+different chromosome, and each row represents a different
+profile/patient. It is clear from the plot above that a model with
+minimal incorrect labels will predict a different penalty for each
+data sequence.
 
 **Question:** discuss with your neighbor for 1 minute, why is there
 only one limit per data sequence? (only one target limit point per
@@ -1427,7 +1459,7 @@ bit too long for this tutorial), we will just use the following subset:
   rownames(coef(fit.cv))[-1]))
 ```
 
-Next we assign folds to targets,
+Next we assign a fold to each target,
 
 ```{r nb-target-dt}
 set.seed(1)
@@ -1435,7 +1467,10 @@ n.folds <- 5
 nb.target.dt[, fold := sample(rep(1:n.folds, l=.N))]
 ```
 
-Then we loop over test folds,
+Then we loop over test folds. In each iteration of the for loop, we
+create `train.target.dt` and `train.features` by excluding data in the
+test fold. We then train each model using these data, and compute
+prediction accuracy for each model using `penaltyLearning::ROChange`.
 
 ```{r cv-auc-list}
 cv.roc.list <- list()
@@ -1477,7 +1512,14 @@ for(test.fold in 1:n.folds){
 }
 cv.auc <- do.call(rbind, cv.auc.list)
 cv.roc <- do.call(rbind, cv.roc.list)
+```
 
+Note that in the code above, we used `cv.roc.list` to save the ROC
+curve for each model and test fold, and we used `cv.auc.list` to save
+AUC. Below we compute and plot two accuracy metrics, AUC and percent
+incorrectly predicted labels.
+
+```{r cvAccuracyPlot}
 cv.auc[, accuracy.percent := 100-error.percent]
 cv.auc.tall <- melt(cv.auc, measure.vars=c("accuracy.percent", "auc"))
 cv.means <- cv.auc.tall[, list(
@@ -1499,8 +1541,9 @@ ggplot()+
   ylab("model")
 ```
 
-It is clear from the plot above that survreg is significantly more accurate than BIC/SIC,
-and IntervalRegressionCV is slightly more accurate than survreg. 
+It is clear from the plot above that survreg is significantly more
+accurate than BIC/SIC, and IntervalRegressionCV is slightly more
+accurate than survreg.
 
 **Remark:** the accuracy rates above (BIC/SIC predicts 92% correct
 labels whereas survreg and IntervalRegressionCV predict 97-98% correct
