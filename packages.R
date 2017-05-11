@@ -66,12 +66,12 @@ if(!r.forge %in% old.repos.vec){
 works_with_R(
   "3.3.3",
   neuroblastoma="1.0",
-  future="1.0.1",
+  future="1.4.0",
   Segmentor3IsBack="2.0",
-  data.table="1.10.4",
+  data.table=c("1.10.4", "1.10.5"),
   survival=c("2.41.2", "2.41.3"),
-  changepoint="2.2.2",
-  fpop="2016.10.18",  
+  changepoint=c("2.2.2", "2.2"),
+  fpop=c("2016.10.18", "2016.10.3"),
   ggplot2="2.1.0",
   "tdhock/penaltyLearning@cd865e1bc1537268d51575b4a555673b1129a964",
   directlabels="2017.3.31")
