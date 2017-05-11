@@ -71,7 +71,7 @@ works_with_R(
   data.table=c("1.10.4", "1.10.5"),
   survival=c("2.41.2", "2.41.3"),
   changepoint=c("2.2.2", "2.2"),
-  fpop=c("2016.10.18", "2016.10.3"),
+  fpop=c("2016.10.25", "2016.10.18", "2016.10.3"),
   ggplot2="2.1.0",
   "tdhock/penaltyLearning@cd865e1bc1537268d51575b4a555673b1129a964",
   directlabels="2017.3.31")
