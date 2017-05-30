@@ -829,9 +829,10 @@ six.features.targets[, residual := penaltyLearning::targetIntervalResidual(
 bic.line.dt <- data.table(
   slope=1, intercept=0, model="BIC/SIC")
 model.colors <- c(
-  "BIC/SIC"="#1B9E77",
-  survreg="#D95F02",
-  IntervalRegressionCV="#7570B3")
+  "BIC/SIC"="#1B9E77",#green
+  survreg="#D95F02",#orange
+  IntervalRegressionCV="#7570B3",#dark purple
+  IntervalRegressionCVmargin="#BEAED4")#light purple
 six.gg.bic <- six.gg.limits+
   scale_color_manual(values=model.colors)+
   geom_abline(aes(
@@ -1484,6 +1485,8 @@ for(test.fold in 1:n.folds){
   set.seed(1)
   fit <- penaltyLearning::IntervalRegressionCV(
     train.features[, some.feature.names], train.target.mat)
+  fit.margin <- penaltyLearning::IntervalRegressionCVmargin(
+    train.features[, some.feature.names], train.target.mat)
   train.target.dt$feature <- train.features[, "n.loglog"]
   fit.survreg <- survreg(
     Surv(min.log.lambda, max.log.lambda, type="interval2") ~ feature,
@@ -1495,6 +1498,7 @@ for(test.fold in 1:n.folds){
   pred.list <- list(
     "BIC/SIC"=test.feature.vec,
     survreg=predict(fit.survreg, data.table(feature=test.feature.vec)),
+    IntervalRegressionCVmargin=predict(fit.margin, labeled.feature.mat[test.id.vec,]),
     IntervalRegressionCV=predict(fit, labeled.feature.mat[test.id.vec,]))
   for(model in names(pred.list)){
     pred.dt <- data.table(
