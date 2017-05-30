@@ -1265,8 +1265,9 @@ regularized linear model.
 
 ```{r fit-cv}
 set.seed(1)
+any.finite <- apply(is.finite(train.target.mat), 1, any)
 fit.cv <- penaltyLearning::IntervalRegressionCV(
-  train.feature.mat, train.target.mat)
+  train.feature.mat[any.finite,], train.target.mat[any.finite,])
 coef(fit.cv)
 ```
 
