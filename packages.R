@@ -73,6 +73,6 @@ works_with_R(
   changepoint=c("2.2.2", "2.2"),
   fpop=c("2016.10.25", "2016.10.18", "2016.10.3"),
   ggplot2="2.1.0",
-  "tdhock/penaltyLearning@0513f037087a689462735075c6d78e5beed4ead2",
+  "tdhock/penaltyLearning@1bb8446e5e37903ee2ba05d76267cc0a08f9d002",
   directlabels="2017.3.31")
 plan(multiprocess)
