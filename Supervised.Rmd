@@ -426,7 +426,9 @@ $s\in\{1,\dots,s_{\text{max}}\}$ segments for data sequence $i$. The
 model selection function is defined for every non-negative penalty
 $\lambda\geq 0$ as
 
-$$ s_i^*(\lambda) = \text{arg min}_s L_{i,s} + \lambda s $$
+$$
+s_i^*(\lambda) = \text{arg min}_s L_{i,s} + \lambda s 
+$$
 
 We plot the function in the figure below, which shows that it is a
 piecewise constant non-increasing function.
@@ -550,8 +552,11 @@ zoom.gg.models+
 Now that we have computed `zoom.error.list$model.errors` which
 contains the number of incorrect labels $e_i(s)\in\{0,1,2,\dots\}$ for
 this data sequence $i$ and every number of segments $s$, we can
-visualize the label error as function of the penalty, $$ E_i(\lambda)
-= e_i[s^*_i(\lambda)] $$
+visualize the label error as function of the penalty, 
+$$
+E_i(\lambda)
+= e_i[s^*_i(\lambda)] 
+$$
 
 The code below makes a figure of $E_i(\lambda)$, clearly showing that
 it is a piecewise constant function that takes integer values (like
@@ -769,7 +774,9 @@ $f(\mathbf x_i)=\mathbf w^\intercal \mathbf x_i + \beta$
 with intercept $\beta=0$ and slope $w=1$ for $p=1$ feature, $\mathbf x_i=\log\log
 d_i$ -- this is the column `n.loglog` of the feature matrix. 
 The BIC/SIC log penalty is
-$$\log\lambda_i = f(\mathbf x_i) = \beta + w\log\log d_i = \log\log d_i$$
+$$
+\log\lambda_i = f(\mathbf x_i) = \beta + w\log\log d_i = \log\log d_i
+$$
 This is equivalent to solving the following penalized
 changepoint detection problem,
 $$
@@ -829,14 +836,20 @@ and intercept 0, and we can visualize its errors using the vertical
 line segments below.
 
 ```{r sixBIC}
-six.features.targets[, residual := penaltyLearning::targetIntervalResidual(
-  cbind(min.log.lambda, max.log.lambda), pred.log.lambda)]
+six.features.targets[, residual := 0]
+six.features.targets[{
+  is.finite(min.log.lambda)|is.finite(max.log.lambda)
+}, residual := {
+  penaltyLearning::targetIntervalResidual(
+    cbind(min.log.lambda, max.log.lambda), pred.log.lambda)
+}]
 bic.line.dt <- data.table(
   slope=1, intercept=0, model="BIC/SIC")
 model.colors <- c(
-  "BIC/SIC"="#1B9E77",
-  survreg="#D95F02",
-  IntervalRegressionCV="#7570B3")
+  "BIC/SIC"="#1B9E77",#green
+  survreg="#D95F02",#orange
+  IntervalRegressionCV="#7570B3",#dark purple
+  IntervalRegressionCVmargin="#BEAED4")#light purple
 six.gg.bic <- six.gg.limits+
   scale_color_manual(values=model.colors)+
   geom_abline(aes(
@@ -974,7 +987,8 @@ the theoretical arguments of the BIC/SIC penalty, we can use the
 labels. The penalty function is
 $\log\lambda_i = f(\mathbf x_i) = \beta + w\log\log
 d_i$ which is equivalent to solving the following penalized
-changepoint detection problem, $$
+changepoint detection problem, 
+$$
 \operatorname{minimize}_{\mathbf m\in\mathbb R^{d_i}}
 \sum_{j=1}^{d_i}
 \ell(z_{ij}, m_j) 
@@ -984,7 +998,9 @@ I(m_{j} \neq m_{j+1}),
 $$
 where the intercept $\beta$ and the slope $w$ 
 are defined as the solution to the following optimization
-problem, $$ \operatorname{minimize}_{ 
+problem, 
+$$
+\operatorname{minimize}_{ 
 \mathbf w\in\mathbb R^p,
 \beta\in\mathbb R,
 \sigma\in\mathbb R_+ 
@@ -994,7 +1010,8 @@ problem, $$ \operatorname{minimize}_{
 F(\overline y_i, \mathbf w^\intercal \mathbf x_i+\beta, \sigma)- 
 F(\underline y_i, \mathbf w^\intercal \mathbf x_i+\beta, \sigma) 
 ],
-$$ where
+$$
+where
 
 * the optimization variables are the coefficients or weight vector
   $\mathbf w\in\mathbb R^p$, the bias/intercept $\beta\in\mathbb R$,
@@ -1042,8 +1059,13 @@ six.survreg.pred[, model := "survreg"]
 six.survreg.pred[, pred.log.lambda := predict(fit.survreg, six.survreg.pred)]
 six.survreg.res <- six.survreg.pred[six.features.targets, on=list(
   profile.id, chromosome)]
-six.survreg.res[, residual := penaltyLearning::targetIntervalResidual(
-  cbind(min.log.lambda, max.log.lambda), pred.log.lambda)]
+six.survreg.res[, residual := 0]
+six.survreg.res[{
+  is.finite(min.log.lambda)|is.finite(max.log.lambda)
+}, residual := {
+  penaltyLearning::targetIntervalResidual(
+    cbind(min.log.lambda, max.log.lambda), pred.log.lambda)
+}]
 six.gg.survreg <- six.gg.bic+
   geom_abline(aes(
     slope=feature, intercept=`(Intercept)`, color=model),
@@ -1190,7 +1212,8 @@ $$
 \sum_{i=1}^n 
 \phi(\mathbf w^\intercal \mathbf x_i+\beta-\underline y_i)+ 
 \phi(\overline y_i-\mathbf w^\intercal \mathbf x_i-\beta) 
-$$ where
+$$
+where
 
 * the data and optimization variables are the same as in the
   un-regularized interval regression problem described in the previous
@@ -1242,8 +1265,9 @@ regularized linear model.
 
 ```{r fit-cv}
 set.seed(1)
+any.finite <- apply(is.finite(train.target.mat), 1, any)
 fit.cv <- penaltyLearning::IntervalRegressionCV(
-  train.feature.mat, train.target.mat)
+  train.feature.mat[any.finite,], train.target.mat[any.finite,])
 coef(fit.cv)
 ```
 
@@ -1489,6 +1513,8 @@ for(test.fold in 1:n.folds){
   set.seed(1)
   fit <- penaltyLearning::IntervalRegressionCV(
     train.features[, some.feature.names], train.target.mat)
+  ## fit.margin <- penaltyLearning::IntervalRegressionCVmargin(
+  ##   train.features[, some.feature.names], train.target.mat)
   train.target.dt$feature <- train.features[, "n.loglog"]
   fit.survreg <- survreg(
     Surv(min.log.lambda, max.log.lambda, type="interval2") ~ feature,
@@ -1500,6 +1526,7 @@ for(test.fold in 1:n.folds){
   pred.list <- list(
     "BIC/SIC"=test.feature.vec,
     survreg=predict(fit.survreg, data.table(feature=test.feature.vec)),
+    ##IntervalRegressionCVmargin=predict(fit.margin, labeled.feature.mat[test.id.vec,]),
     IntervalRegressionCV=predict(fit, labeled.feature.mat[test.id.vec,]))
   for(model in names(pred.list)){
     pred.dt <- data.table(
