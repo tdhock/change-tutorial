@@ -1,5 +1,7 @@
 Supervised.html: Supervised.Rmd
 	Rscript -e 'rmarkdown::render("Supervised.Rmd")'
+depmixS4.models.RData: depmixS4.models.R
+	R --no-save < $<
 figure-postCP.pdf: figure-postCP.R
 	R --no-save < $<
 pelt.fpop.RData: pelt.fpop.R Segmentor.models.RData
