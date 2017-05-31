@@ -1,5 +1,5 @@
 source("packages.R")
-library(depmixS4)
+works_with_R("3.4.0", depmixS4="1.3.4")
 
 max.states <- 5
 
