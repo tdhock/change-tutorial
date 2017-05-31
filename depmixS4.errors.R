@@ -6,14 +6,20 @@ load("depmixS4.models.RData")
 
 data(neuroblastoma, package="neuroblastoma")
 
-selection <- depmixS4.models$loss[, modelSelection(
-  .SD, "neg.logLik", "nstates"
-), by=.(profile.id, chromosome)]
+selection <- depmixS4.models[, modelSelection(
+  data.table(neg.logLik, nstates),
+  "neg.logLik", "nstates"
+), by=list(profile.id, chromosome)]
 some.anns <- subset(
   neuroblastoma$annotations,
   paste(profile.id, chromosome) %in% selection[, paste(profile.id, chromosome)])
+changes <- depmixS4.models[, {
+  list(
+    change=changes[[1]]
+    )
+}, by=list(profile.id, chromosome, nstates)]
 errors <- labelError(
-  selection, some.anns, depmixS4.models$change,
+  selection, some.anns, changes,
   change.var="change",
   label.vars=c("min", "max"),
   model.vars="nstates",
