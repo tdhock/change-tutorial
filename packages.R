@@ -64,15 +64,12 @@ if(!r.forge %in% old.repos.vec){
   options(repos=c(r.forge, old.repos.vec))
 }
 works_with_R(
-  "3.3.3",
+  c("3.3.3", "3.4.0"),
   neuroblastoma="1.0",
   future="1.4.0",
   Segmentor3IsBack="2.0",
   data.table=c("1.10.4", "1.10.5"),
   survival=c("2.41.2", "2.41.3"),
-  changepoint=c("2.2.2", "2.2"),
-  fpop=c("2016.10.25", "2016.10.18", "2016.10.3"),
-  ggplot2="2.1.0",
-  "tdhock/penaltyLearning@1bb8446e5e37903ee2ba05d76267cc0a08f9d002",
-  directlabels="2017.3.31")
+  ggplot2=c("2.1.0", "2.2.1"),
+  "tdhock/penaltyLearning@1bb8446e5e37903ee2ba05d76267cc0a08f9d002")
 plan(multiprocess)

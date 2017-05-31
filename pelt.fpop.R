@@ -1,4 +1,7 @@
 source("packages.R")
+works_with_R("3.4.0",
+  changepoint=c("2.2.2", "2.2"),
+  fpop=c("2016.10.25", "2016.10.18", "2016.10.3"))
 
 load("Segmentor.models.RData")
 setkey(Segmentor.models$loss, profile.id, chromosome)
