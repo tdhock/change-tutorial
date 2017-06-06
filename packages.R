@@ -68,6 +68,7 @@ works_with_R(
   neuroblastoma="1.0",
   future="1.4.0",
   Segmentor3IsBack="2.0",
+  changepoint="2.2",
   data.table=c("1.10.4", "1.10.5"),
   survival=c("2.41.2", "2.41.3"),
   ggplot2=c("2.1.0", "2.2.1"),
