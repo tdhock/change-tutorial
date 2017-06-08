@@ -205,6 +205,128 @@ changepoint model should be consistent with the labels:
 profiles. Hint: assign a new value to `some.ids`, then re-run the code
 above. 
 
+## Label error of an unsupervised changepoint model
+
+In this section we show that typical unsupervised changepoint models
+result in prediction errors with respect to the labels in the
+neuroblastoma data. We begin by using the `changepoint::cpt.mean`
+function to compute an unsupervised changepoint model for each data
+sequence. To compute the number of incorrect labels later, make sure
+to save a description of the model in a "tidy" data.frame
+(observations on rows and variables on columns). In the code below we
+
+* fit the model inside `by=list(status.profile, chromosome)` which adds
+  those two columns to the resulting `data.table`.
+* add the `pen.name` column to identify the model.
+* use the `changes` list column to save the changepoint positions (in
+  the same units as the label positions: bases on the chromosome).
+
+```{r unsupervised-models}
+pen.name <- "SIC0"
+(unsupervised.models <- six.profiles[, {
+  fit.pelt <- changepoint::cpt.mean(
+    logratio, penalty=pen.name, method="PELT")
+  end <- fit.pelt@cpts
+  before.change <- end[-length(end)]
+  after.change <- before.change+1L
+  data.table(
+    pen.name,
+    pen.value=fit.pelt@pen.value,
+    changes=list(
+    (position[before.change]+position[after.change])/2
+    ))
+}, by=list(profile.id, status.profile, chromosome)])
+```
+
+Next, we convert the list column `changes` to tall format (one row for
+each changepoint).
+
+```{r unsupervised-changes}
+(unsupervised.changes <- unsupervised.models[, data.table(
+  change=changes[[1]]
+), by=list(profile.id, status.profile, chromosome, pen.name)])
+```
+
+**New function:** we now introduce the `penaltyLearning::labelError`
+function, which computes the number of incorrect labels for a set of
+predicted changepoints. Its inputs are 3 data.frames:
+
+* `models` one row per changepoint model.
+* `labels` one row for each label, with columns for label location and
+  type.
+* `changes` one row for each predicted changepoint, with a column for
+  the predicted changepoint position.
+
+```{r unsupervised-error-list}
+unsupervised.error.list <- penaltyLearning::labelError(
+  unsupervised.models, six.labels, unsupervised.changes,
+  problem.vars=c("status.profile", "chromosome"),
+  model.vars="pen.name",
+  change.var="change")
+```
+
+The result of `labelError` is a list of two data tables:
+
+* `model.errors` has one row per (sequence,model), with the total
+  number of incorrect labels. We use these totals in the `ggtitle` of
+  the plot below.
+* `label.errors` has one row per (sequence,model,label), with the
+  fp/fn status of each label. We use these to visualize false negative
+  and false positive predictions using the `geom_tallrect` with
+  `aes(linetype=status)` below.
+  
+```{r gg-unsupervised-bic, fig.width=10}
+gg.supervised+
+  theme(legend.box="horizontal")+
+  unsupervised.error.list$model.errors[, ggtitle(paste0(
+    "Unsupervised ", pen.name, " penalty has ",
+    sum(errors),
+    " incorrect labels: ",
+    sum(fp), " FP + ",
+    sum(fn), " FN"))]+
+  geom_vline(aes(
+    xintercept=change/1e6),
+    color="green",
+    size=1,
+    linetype="dashed",
+    data=unsupervised.changes)+
+  geom_tallrect(aes(
+    xmin=min/1e6, xmax=max/1e6, linetype=status),
+    fill=NA,
+    data=unsupervised.error.list$label.errors)+
+  scale_linetype_manual("error type", values=c(
+    correct=0,
+    "false negative"=3,
+    "false positive"=1))
+```
+
+Note that in the plot above we also plotted the predicted changepoints
+using a green dashed `geom_vline`. Labels with inconsistent
+changepoints are shown with a black border in the `geom_tallrect`,
+with `scale_linetype_manual` to show the type of prediction error:
+
+* **False positives** are labels with too many predicted changepoints,
+  drawn with a solid black border (none here but we will see some
+  later).
+* **False negatives** are labels with too few predicted changepoints,
+  drawn with a dotted black border.
+* **Correct** labels with no border have an acceptable number of
+  predicted changepoints.
+
+**Remark:** the result above (BIC/SIC predicts too few changepoints,
+resulting in false negatives) is specific to the neuroblastoma data
+set. However, in general you can expect that unsupervised penalty
+functions will commit changepoint detection errors which are visually
+obvious. This is the main motivation of supervised changepoint
+analysis: we can use labels to learn a penalty function with improved
+changepoint detection accuracy.
+
+**Exercise during class:** try changing the `pen.name` variable
+above to another theretically-motivated unsupervised penalty. Other
+options from `help(cpt.mean)` are SIC (without a zero), MBIC, AIC, and
+Hannan-Quinn. Can you find a penalty with improved changepoint
+detection accuracy?
+
 ## Creating labels via visual inspection
 
 **Exercise after class:** create a set of labels via visual
@@ -282,128 +404,6 @@ print(zoom.gg.lab)
 The plot above shows the noisy data along with the labels. Note that
 it is possible to have multiple labels per data sequence, even though
 that is not the case for the neuroblastoma data set.
-
-## Label error of an unsupervised changepoint model
-
-In this section we show that typical unsupervised changepoint models
-result in prediction errors with respect to the labels in the
-neuroblastoma data. We begin by using the `changepoint::cpt.mean`
-function to compute an unsupervised changepoint model for each data
-sequence. To compute the number of incorrect labels later, make sure
-to save a description of the model in a "tidy" data.frame
-(observations on rows and variables on columns). In the code below we
-
-* fit the model inside `by=list(status.profile, chromosome)` which adds
-  those two columns to the resulting `data.table`.
-* add the `pen.name` column to identify the model.
-* use the `changes` list column to save the changepoint positions (in
-  the same units as the label positions: bases on the chromosome).
-
-```{r unsupervised-models}
-pen.name <- "SIC0"
-(unsupervised.models <- six.profiles[, {
-  fit.pelt <- changepoint::cpt.mean(
-    logratio, penalty=pen.name, method="PELT")
-  end <- fit.pelt@cpts
-  before.change <- end[-length(end)]
-  after.change <- before.change+1L
-  data.table(
-    pen.name,
-    pen.value=fit.pelt@pen.value,
-    changes=list(
-    (position[before.change]+position[after.change])/2
-    ))
-}, by=list(profile.id, status.profile, chromosome)])
-```
-
-Next, we convert the list column `changes` to tall format (one row for
-each changepoint).
-
-```{r unsupervised-changes}
-(unsupervised.changes <- unsupervised.models[, data.table(
-  change=changes[[1]]
-), by=list(profile.id, status.profile, chromosome, pen.name)])
-```
-
-**New function:** we now introduce the `penaltyLearning::labelError`
-function, which computes the number of incorrect labels for a set of
-predicted changepoints. Its inputs are 3 data.frames:
-
-* `models` one row per changepoint model.
-* `labels` one row for each label, with columns for label location and
-  type.
-* `changes` one row for each predicted changepoint, with a column for
-  the predicted changepoint position.
-
-```{r unsupervised-error-list}
-unsupervised.error.list <- penaltyLearning::labelError(
-  unsupervised.models, six.labels, unsupervised.changes,
-  problem.vars=c("status.profile", "chromosome"),
-  model.vars="pen.name",
-  change.var="change")
-```
-
-The result of `labelError` is a list of two data tables:
-
-* `model.errors` has one row per (sequence,model), with the total
-  number of incorrect labels. We use these totals in the `ggtitle` of
-  the plot below.
-* `label.errors` has one row per (sequence,model,label), with the
-  fp/fn status of each label. We use these to visualize false negative
-  and false positive predictions using the `geom_tallrect` with
-  `aes(linetype=status)` below.
-  
-```{r}
-gg.supervised+
-  theme(legend.box="horizontal")+
-  unsupervised.error.list$model.errors[, ggtitle(paste0(
-    "Unsupervised ", pen.name, " penalty has ",
-    sum(errors),
-    " incorrect labels: ",
-    sum(fp), " FP + ",
-    sum(fn), " FN"))]+
-  geom_vline(aes(
-    xintercept=change/1e6),
-    color="green",
-    size=1,
-    linetype="dashed",
-    data=unsupervised.changes)+
-  geom_tallrect(aes(
-    xmin=min/1e6, xmax=max/1e6, linetype=status),
-    fill=NA,
-    data=unsupervised.error.list$label.errors)+
-  scale_linetype_manual("error type", values=c(
-    correct=0,
-    "false negative"=3,
-    "false positive"=1))
-```
-
-Note that in the plot above we also plotted the predicted changepoints
-using a green dashed `geom_vline`. Labels with inconsistent
-changepoints are shown with a black border in the `geom_tallrect`,
-with `scale_linetype_manual` to show the type of prediction error:
-
-* **False positives** are labels with too many predicted changepoints,
-  drawn with a solid black border (none here but we will see some
-  later).
-* **False negatives** are labels with too few predicted changepoints,
-  drawn with a dotted black border.
-* **Correct** labels with no border have an acceptable number of
-  predicted changepoints.
-
-**Remark:** the result above (BIC/SIC predicts too few changepoints,
-resulting in false negatives) is specific to the neuroblastoma data
-set. However, in general you can expect that unsupervised penalty
-functions will commit changepoint detection errors which are visually
-obvious. This is the main motivation of supervised changepoint
-analysis: we can use labels to learn a penalty function with improved
-changepoint detection accuracy.
-
-**Exercise during class:** try changing the `pen.name` variable
-above to another theretically-motivated unsupervised penalty. Other
-options from `help(cpt.mean)` are SIC (without a zero), MBIC, AIC, and
-Hannan-Quinn. Can you find a penalty with improved changepoint
-detection accuracy?
 
 # A typical supervised changepoint analysis
 
