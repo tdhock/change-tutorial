@@ -55,8 +55,8 @@ The neuroblastoma data set consists of two data.frames:
   problem. The logratio measures how many copies of each part of the
   human genome are present in the patient's tumor. Normally there are
   two copies of each chromosome (logratio=0), but in cancer samples
-  there can be gains and losses of specific regions or entire
-  chromosomes.
+  there can be gains (changes up) and losses (changes down) of
+  specific regions or entire chromosomes.
 * annotations contains the labels, which indicate presence
   (breakpoint) or absence (normal) of changepoints in specific regions
   (profile.id, chromosome, min, max) of the data.
@@ -68,7 +68,7 @@ treatment:
 
 ```{r clinical}
 followup <- data.frame(
-  profile.id=c(10L, 8L, 4L, 6L, 11L, 1L),
+  profile.id=paste(c(10, 8, 4, 6, 11, 1)),
   status=c("ok", "relapse", "relapse", "ok", "ok", "relapse"))
 followup
 ```
@@ -232,7 +232,25 @@ zoom.gg <- ggplot()+
 print(zoom.gg)
 ```
 
-Then make a data.frame with the label type and positions, as below.
+Based on your visual interpretation of the plot above, you can create
+a set of labels. 
+
+* For each region that contains at least one changepoint, create a
+  "breakpoint" label (no predicted changes inside is a false
+  negative).
+* For each region that contains no changepoints, create a "normal"
+  label (one or more predicted changes inside is a false positive)..
+* For each region that contains exactly one changepoint, create a
+  "1change" label (no predicted changes inside is a false negative,
+  and two or more is a false positive).
+
+The region for each label can be as small or as large as you want.
+Because the goal of learning is to minimize the number of incorrectly
+predicted labels, it is important to make sure that each label is a
+correct representation of the changepoint model you want. Avoid
+labeling any regions for which you are not sure about the label. Save
+your labels to a data.frame with the label type and positions, as
+below.
 
 ```{r manual-label-fun}
 label <- function(min, max, annotation){
@@ -254,9 +272,9 @@ zoom.gg.lab <- zoom.gg+
 print(zoom.gg.lab)
 ```
 
-Note that we used the "1change" label above, which means that the
-model should predict exactly 1 changepoint in the region (0 predicted
-changes is a false negative, and 2 or more is a false positive).
+The plot above shows the noisy data along with the labels. Note that
+it is possible to have multiple labels per data sequence, even though
+that is not the case for the neuroblastoma data set.
 
 ## Label error of an unsupervised changepoint model
 
@@ -447,7 +465,7 @@ print(zoom.gg.lab)
 ```
 
 We use the code below to compute a sequence of maximum likelihood
-Gaussian models with $s\in\{1,\dots,5\}$ segments. In contrast, a
+Gaussian models with $s\in\{1,\dots,7\}$ segments. In contrast, a
 typical unsupervised analysis will include computation of *one*
 changepoint model. In supervised analysis we need to compute *a
 sequence of changepoint models of increasing complexity* in order to
@@ -455,6 +473,19 @@ determine which are consistent and inconsistent with the
 labels. Remember the goal of the machine learning is to predict a
 model with complexity consistent with the labels (minimize the number
 of incorrectly predicted labels).
+
+**New function:** `Segmentor3IsBack::Segmentor` computes maximum
+likelihood segmentations from 1 to Kmax segments. Inputs are the data
+sequence to segment, the likelihood (model=2 means normal/Gaussian),
+and the maximum number of segments (Kmax). For a supervised
+changepoint analysis, Kmax should be rather large, but how do you know
+if it is large enough? You should check to make sure there is at least
+one model with a false positive (a labeled region with too many
+predicted changepoints), if that is possible (not possible for data
+sequences with only breakpoint labels). These false positives in the
+training labels/models are used to learn a penalty function that avoids
+predicting too many changepoints. More details below in the
+[Outputs](#outputs) section.
 
 ```{r zoomSegmentor}
 max.segments <- 7
@@ -1386,9 +1417,17 @@ prediction accuracy?
 ### IntervalRegressionCV (L1-regularized interval regression)
 
 In the previous sections, we assumed that the log(penalty) is an
-affine function of a given single feature. In this section, we show
+affine function of a given single feature. 
+We chose that feature based on the theoretical arguments
+of the BIC/SIC penalty. In this section, we show
 how a multi-variate affine penalty function can be learned using L1
-regularization. The penalty function we learn is $\log\lambda_i =
+regularization. This technique is great when you don't have a 
+theoretical prior for the penalty. You can compute as many features
+as you like (256 using `penaltyLearning::featureMatrix`), 
+and the L1 regularization with ignore any irrelevant features
+automatically (feature selection).
+
+The penalty function we learn is $\log\lambda_i =
 f(\mathbf x_i) = \beta + \mathbf w^\intercal \mathbf x_i$ 
 which is equivalent to solving the
 following penalized changepoint detection problem,
@@ -1400,11 +1439,12 @@ $$
 \sum_{j=1}^{d_i-1} 
 I(m_{j} \neq m_{j+1}), 
 $$ 
-where the intercept $\beta$ and the weight vector $w$ are defined
+where the intercept $\beta$ and the weight vector $\mathbf w$ are defined
 as the solution to the following optimization problem, 
 $$
 \operatorname{minimize}_{ \mathbf w\in\mathbb R^p, \beta\in\mathbb R }
 \gamma ||\mathbf w||_1 +
+\frac{1}{n}
 \sum_{i=1}^n 
 \phi(\mathbf w^\intercal \mathbf x_i+\beta-\underline y_i)+ 
 \phi(\overline y_i-\mathbf w^\intercal \mathbf x_i-\beta) 
@@ -1415,7 +1455,7 @@ where
   un-regularized interval regression problem described in the previous
   section (except there is no scale $\sigma$).
 * the L1-norm $||\mathbf w||_1=\sum_{j=1}^p |w_j|$ is a regularization
-  term which is to avoid overfitting. It forces some of the $w_j$
+  term which is used to avoid overfitting. It forces some of the $w_j$
   weights to be exactly zero (feature selection).
 * the hyper-parameter $\gamma>0$ is the degree of L1-regularization
   (chosen via an internal cross-validation loop). This means that the
@@ -1425,7 +1465,7 @@ where
 * $\phi(x)=(x-1)^2I(x<1)$ is the squared hinge loss ($I$ is the
   indicator function: 1 if the argument is true, and 0 otherwise). 
 * The objective function to minimize is the L1-norm of the weight
-  vector plus the total squared hinge loss (both are convex). Overall
+  vector plus the mean squared hinge loss (both are convex). Overall
   the optimization problem is convex, so the global minimum is
   guaranteed to be found in a reasonable amount of time using
   gradient-based algorithms.
@@ -1437,7 +1477,8 @@ the train set:
 
 ```{r train-feature-mat}
 finite.feature.mat <- feature.mat[, apply(is.finite(feature.mat), 2, all)]
-train.feature.mat <- train.dt[, finite.feature.mat[paste(profile.id, chromosome),] ]
+train.ids <- train.dt[, paste(profile.id, chromosome) ]
+train.feature.mat <- finite.feature.mat[train.ids, ]
 train.target.mat <- train.dt[, cbind(min.log.lambda, max.log.lambda)]
 str(train.feature.mat)
 ```
@@ -1461,8 +1502,9 @@ regularized linear model.
 
 **New function:** the `penaltyLearning::IntervalRegressionCV` function
 computes an L1-regularized interval regression model. Its two main
-inputs are a numeric feature matrix (n observations x p features), and
-a numeric target matrix (n observations x 2). It outputs a model fit
+inputs are a numeric input feature matrix (n observations x p features), and
+a numeric output target interval matrix (n observations x 2). 
+Its return value is a model fit
 object of class `IntervalRegression`, which has `predict`, `print`,
 `plot`, and `coef` methods.
 
@@ -1672,9 +1714,10 @@ Before performing cross-validation, we can compute the error
 functions, features and target intervals for all of the labeled data.
 
 ```{r labeled-feature-mat}
-nb.selection <- Segmentor.models$loss[, penaltyLearning::modelSelection(
-  .SD, complexity="n.segments"), by=list(
-    profile.id, chromosome)]
+nb.selection <- Segmentor.models$loss[, {
+  penaltyLearning::modelSelection(
+    .SD, complexity="n.segments")
+}, by=list(profile.id, chromosome)]
 nb.error.list <- penaltyLearning::labelError(
   nb.selection,
   neuroblastoma$annotations,
