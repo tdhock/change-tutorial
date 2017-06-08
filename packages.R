@@ -72,5 +72,5 @@ works_with_R(
   data.table=c("1.10.4", "1.10.5"),
   survival=c("2.41.2", "2.41.3"),
   ggplot2=c("2.1.0", "2.2.1"),
-  "tdhock/penaltyLearning@1bb8446e5e37903ee2ba05d76267cc0a08f9d002")
+  penaltyLearning="2017.5.8")
 plan(multiprocess)
