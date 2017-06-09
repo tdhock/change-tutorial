@@ -13,6 +13,10 @@ adapEnetClass, icenReg, and non-linear models.
 
 Copy and adapt tutorial materials from [[https://github.com/eRum2016/Workshops/blob/master/details/An%2520introduction%2520to%2520changepoint%2520models%2520using%2520R.md][Rebecca's eRum2016 workshop]].
 
+[[file:depmixS4.models.R]] tries to fit an HMM to the neuroblastoma data
+set, but I ran into [[file:depmixS4.bugs.R]] -- I emailed the author
+<i.visser@uva.nl> on May 31 but I haven't heard anything yet.
+
 ** 9 June 2017
 
 Compare with BIC from PELT/fpop [[file:pelt.fpop.R]]
