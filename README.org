@@ -1,35 +1,21 @@
+This repository contains code for the useR2017 tutorial "Introduction
+to optimal changepoint detection algorithms" by Toby Dylan Hocking and
+Rebecca Killick.
+
+Rebecca: Unsupervised changepoint detection, 90 minutes. TODO links.
+
+Toby: [[http://members.cbio.mines-paristech.fr/~thocking/change-tutorial/Supervised.html][Supervised changepoint detection]], 90 minutes. source: [[file:Supervised.Rmd]].
+
 ** TODOs
-
-Compare with BIC from PELT [[file:pelt.models.R]]
-
-CRAN submission because penaltyLearning has compiled code:
-- remove test-peaks.R which needs coseg, PeakSegDP, and PeakError
-  (remove from Suggests also)
-- remove Remotes from DESCRIPTION.
-- DONE: remove iregnet example.
-- remove the following long examples, or put in if(interactive())
-#+BEGIN_EXAMPLE
-Examples with CPU or elapsed time > 5s
-                                 user system  elapsed
-IntervalRegressionCV          623.212  3.028 1256.107
-modelSelectionR               106.232 70.304  180.940
-IntervalRegressionRegularized  48.400  1.248   50.836
-ROChange                       20.604  0.592   21.657
-labelError                      9.204  0.460    9.754
-largestContinuousMinimumC       6.540  0.496    7.356
-targetIntervals                 6.488  0.468    7.198
-largestContinuousMinimumR       6.204  0.440    6.803
-modelSelectionC                 5.720  0.568    6.487
-featureMatrix                   5.064  0.792    5.988
-#+END_EXAMPLE
-- DONE: fixed global variable issues by adding NULL variables.
 
 For a more advanced tutorial, check out coarseDataTools::EMforCFR,
 adapEnetClass, icenReg, and non-linear models.
 
-Package for geom_tallrect / widerect?
-
 Copy and adapt tutorial materials from [[https://github.com/eRum2016/Workshops/blob/master/details/An%2520introduction%2520to%2520changepoint%2520models%2520using%2520R.md][Rebecca's eRum2016 workshop]].
+
+** 9 June 2017
+
+Compare with BIC from PELT/fpop [[file:pelt.fpop.R]]
 
 ** 27 Apr 2017
 
