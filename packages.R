@@ -1,3 +1,25 @@
+## Install packages to a local library.
+local.lib <- file.path(getwd(), "library")
+old.path.vec <- .libPaths()
+if(! local.lib %in% old.path.vec){
+  dir.create(local.lib, showWarnings=FALSE, recursive=TRUE)
+  .libPaths(local.lib)
+}
+## Download packages from R-Forge.
+r.forge <- "http://r-forge.r-project.org"
+old.repos.vec <- getOption("repos")
+if(!r.forge %in% old.repos.vec){
+  options(repos=c(r.forge, old.repos.vec))
+}
+## Install a new version if we have old versions of these packages.
+install.if.old <- function(pkg, vers){
+  unloadNamespace(pkg)
+  if(packageVersion(pkg) < vers){
+    install.packages(pkg)
+  }
+}
+install.if.old("survival", "2.41.2")
+install.if.old("data.table", "1.9.8")
 ### Write down what package versions work with your R code, and
 ### attempt to download and load those packages. The first argument is
 ### the version of R that you used, e.g. "3.0.2" and then the rest of
@@ -10,12 +32,6 @@
 ### e.g. "tdhock/animint@f877163cd181f390de3ef9a38bb8bdd0396d08a4" and
 ### we use install_github to get it, if necessary.
 works_with_R <- function(Rvers,...){
-  local.lib <- file.path(getwd(), "library")
-  old.path.vec <- .libPaths()
-  if(! local.lib %in% old.path.vec){
-    dir.create(local.lib, showWarnings=FALSE, recursive=TRUE)
-    .libPaths(local.lib)
-  }
   pkg_ok_have <- function(pkg,ok,have){
     stopifnot(is.character(ok))
     if(!as.character(have) %in% ok){
@@ -54,19 +70,6 @@ works_with_R <- function(Rvers,...){
       library(pkg, character.only=TRUE)
     }
   }
-}
-install.if.old <- function(pkg, vers){
-  if(packageVersion(pkg) < vers){
-    unloadNamespace(pkg)
-    install.packages(pkg)
-  }
-}
-install.if.old("survival", "2.41.2")
-install.if.old("data.table", "1.9.8")
-r.forge <- "http://r-forge.r-project.org"
-old.repos.vec <- getOption("repos")
-if(!r.forge %in% old.repos.vec){
-  options(repos=c(r.forge, old.repos.vec))
 }
 works_with_R(
   c("3.3.3", "3.4.0"),
