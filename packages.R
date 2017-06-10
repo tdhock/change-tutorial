@@ -58,6 +58,9 @@ works_with_R <- function(Rvers,...){
 if(packageVersion("survival") < "2.41.2"){
   install.packages("survival")
 }
+if(packageVersion("data.table") < "1.9.8"){
+  install.packages("data.table")
+}
 r.forge <- "http://r-forge.r-project.org"
 old.repos.vec <- getOption("repos")
 if(!r.forge %in% old.repos.vec){
