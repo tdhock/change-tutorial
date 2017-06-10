@@ -55,12 +55,14 @@ works_with_R <- function(Rvers,...){
     }
   }
 }
-if(packageVersion("survival") < "2.41.2"){
-  install.packages("survival")
+install.if.old <- function(pkg, vers){
+  if(packageVersion(pkg) < vers){
+    unloadNamespace(pkg)
+    install.packages(pkg)
+  }
 }
-if(packageVersion("data.table") < "1.9.8"){
-  install.packages("data.table")
-}
+install.if.old("survival", "2.41.2")
+install.if.old("data.table", "1.9.8")
 r.forge <- "http://r-forge.r-project.org"
 old.repos.vec <- getOption("repos")
 if(!r.forge %in% old.repos.vec){
