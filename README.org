@@ -8,7 +8,7 @@ Toby: [[http://members.cbio.mines-paristech.fr/~thocking/change-tutorial/Supervi
 [[file:Supervised.Rmd]]. Options to follow along:
 - Recommended: run the code on Rcloud
   https://rcloud.social/edit.html?notebook=699c9c7c6f47ce56358d6d9b8e548835
-  (probably no version problems).
+  (make sure to click the fork so you can makes changes).
 - Rstudio: download
   https://raw.githubusercontent.com/tdhock/change-tutorial/master/Supervised.Rmd
   and open in Rstudio
