@@ -631,6 +631,14 @@ A few references about the algorithm implemented in the `Segmentor` function:
   (uniform variance -- change in mean), Negative Binomial, Normal
   Heteroscedastic (uniform mean -- change in variance), and
   Exponential likelihood models.
+  
+**Exercise after class:** instead of using `Segmentor` to compute a
+sequence of models, try using
+`changepoint::cpt.mean(penalty="CROPS")`,
+[arXiv:1412.3617](https://arxiv.org/abs/1412.3617). Then re-do the
+rest of the analyses below. Another option is
+`cghseg:::segmeanCO`. Using any of these three packages you should be
+able to get the same results.
 
 ## Label error
 
@@ -1654,6 +1662,17 @@ as a function of model complexity via `plot(fit.cv)`, then re-do the
 model prediction error plots. Is this model more or less accurate?
 Why?  Hint: use `coef(fit.cv)` to see how many features are included
 in the model.
+
+### Other methods
+
+**Exercise after class:** try one of these other interval regression
+algorithms, and see if you can get better results.
+
+* [iregnet](https://github.com/anujkhare/iregnet), elastic net
+  regularized Accelerated Failure Time models.
+* [mmit](https://github.com/aldro61/mmit), max margin interval trees.
+* [trtf](https://r-forge.r-project.org/R/?group_id=1322)
+  transformation trees and forests.
 
 ## Evaluation
 
