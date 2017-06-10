@@ -18,6 +18,7 @@ install.if.old <- function(pkg, vers){
     install.packages(pkg)
   }
 }
+unloadNamespace("penaltyLearning")
 install.if.old("survival", "2.41.2")
 install.if.old("data.table", "1.9.8")
 ### Write down what package versions work with your R code, and
@@ -77,8 +78,9 @@ works_with_R(
   future="1.4.0",
   Segmentor3IsBack="2.0",
   changepoint="2.2",
+  directlabels="2017.3.31",
   data.table=c("1.10.4", "1.10.5"),
   survival=c("2.41.2", "2.41.3"),
   ggplot2=c("2.1.0", "2.2.1"),
   penaltyLearning="2017.5.8")
-plan(multiprocess)
+future::plan(multiprocess)
