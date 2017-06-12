@@ -7,11 +7,12 @@ output:
     toc_depth: 2
 ---
 
-Download this Rmd from
-https://raw.githubusercontent.com/tdhock/change-tutorial/master/Supervised.Rmd
+GitHub repository: https://github.com/tdhock/change-tutorial
 
-It is suggested to follow along by executing the code blocks using
-Rstudio (may have version problems) or https://rcloud.social/edit.html
+Download this
+[Rmd](https://raw.githubusercontent.com/tdhock/change-tutorial/master/Supervised.Rmd)
+and follow along by executing the code blocks using Rstudio (may have
+version problems) or [Rcloud](https://rcloud.social/edit.html)
 (probably fewer problems).
 
 Before starting this tutorial, make sure to install the required packages:
