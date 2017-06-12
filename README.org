@@ -22,6 +22,9 @@ Toby: [[http://members.cbio.mines-paristech.fr/~thocking/change-tutorial/Supervi
 For a more advanced tutorial, check out coarseDataTools::EMforCFR,
 adapEnetClass, icenReg, and non-linear models.
 
+Try `cv.glmnet(family="poisson")` for predicting the number of
+changepoints.
+
 Copy and adapt tutorial materials from [[https://github.com/eRum2016/Workshops/blob/master/details/An%2520introduction%2520to%2520changepoint%2520models%2520using%2520R.md][Rebecca's eRum2016 workshop]].
 
 [[file:depmixS4.models.R]] tries to fit an HMM to the neuroblastoma data
