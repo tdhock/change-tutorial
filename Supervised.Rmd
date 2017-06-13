@@ -202,10 +202,6 @@ changepoint model should be consistent with the labels:
   number of incorrectly predicted labels, which is defined as the sum
   of false positives and false negatives.
 
-**Exercise after class:** plot data and labels for a different set of
-profiles. Hint: assign a new value to `some.ids`, then re-run the code
-above. 
-
 ## Label error of an unsupervised changepoint model
 
 In this section we show that typical unsupervised changepoint models
@@ -322,11 +318,13 @@ obvious. This is the main motivation of supervised changepoint
 analysis: we can use labels to learn a penalty function with improved
 changepoint detection accuracy.
 
-**Exercise during class:** try changing the `pen.name` variable
-above to another theretically-motivated unsupervised penalty. Other
-options from `help(cpt.mean)` are SIC (without a zero), MBIC, AIC, and
+**Exercise during class:** try changing the `pen.name` variable above
+to another theretically-motivated unsupervised penalty. Other options
+from `help(cpt.mean)` are SIC (without a zero), MBIC, AIC, and
 Hannan-Quinn. Can you find a penalty with improved changepoint
-detection accuracy?
+detection accuracy? Also try changing the `some.ids` variable (to some
+profile IDs from 1 to 603) to see the changepoints and label errors
+for another set of profiles.
 
 ## Creating labels via visual inspection
 
