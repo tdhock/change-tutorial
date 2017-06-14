@@ -90,9 +90,13 @@ ggplot()+
     "false negative"=3,
     "false positive"=1))
 
-## Exercise 2: label a profile.
+## Exercise 2: label a profile and visualize which models are
+## consistent with your labels. compute the model selection and error
+## functions. Change the definition of the labels -- how does the
+## target interval change? What happens to the target interval if you
+## reduce max.segments?
 zoom.profile <- 104     #Exercise: change this value!
-zoom.chromosome <- 14 #Exercise: change this value!
+zoom.chromosome <- 10 #Exercise: change this value!
 label <- function(min, max, annotation){
   data.frame(
     profile.id=paste(zoom.profile),
@@ -100,8 +104,9 @@ label <- function(min, max, annotation){
     min, max, annotation)
 }
 zoom.labels <- rbind(# Exercise: change these values!
-  label(70e6, 90e6, "1change"), 
-  label(20e6, 60e6, "normal"))
+  label(60e6, 100e6, "normal"),
+  ##label(40e6, 60e6, "1change"), 
+  label(100e6, 120e6, "breakpoint"))
 zoom.pro <- subset(
   neuroblastoma$profiles,
   profile.id==zoom.profile & chromosome==zoom.chromosome)
@@ -121,10 +126,7 @@ ggplot()+
     breakpoint="#a445ee",
     normal="#f6c48f"
   ))
-
-## Exercise 3: compute a sequence of maximum likelihood segmentation
-## models.
-max.segments <- 10
+max.segments <- 15
 fit <- Segmentor3IsBack::Segmentor(
   zoom.pro$logratio, model=2, Kmax=max.segments)
 zoom.segs.list <- list()
@@ -211,4 +213,56 @@ ggplot()+
     correct=0,
     "false negative"=3,
     "false positive"=1))
+zoom.selection <- penaltyLearning::modelSelection(
+  zoom.models, complexity="n.segments")
+zoom.error.join <- zoom.error.list$model.errors[J(zoom.selection), on=list(
+  profile.id, chromosome, n.segments, loss)]
+zoom.errors.tall <- data.table::melt(
+  zoom.error.join,
+  measure.vars=c("n.segments", "errors"))
+zoom.target <- penaltyLearning::targetIntervals(
+  zoom.error.join,
+  problem.vars=c("profile.id", "chromosome"))
+zoom.target.tall <- data.table::melt(
+  zoom.target,
+  measure.vars=c("min.log.lambda", "max.log.lambda"),
+  variable.name="limit")[is.finite(value)]
+ggplot()+
+  geom_segment(aes(
+    min.log.lambda, value,
+    xend=max.log.lambda, yend=value),
+    size=1,
+    data=zoom.errors.tall)+
+  theme_bw()+
+  theme(panel.margin=grid::unit(0, "lines"))+
+  facet_grid(variable ~ ., scales="free")+
+  scale_y_continuous("", breaks=0:max.segments)+
+  xlab("log(penalty) = log(lambda)")+
+  geom_text(aes(
+    ifelse(limit=="min.log.lambda", value-1, value+1),
+    errors,
+    label=paste(
+      "false", 
+      ifelse(limit=="min.log.lambda", "positives", "negatives"),
+      "\ntoo",
+      ifelse(limit=="min.log.lambda", "many", "few"),
+      "changes"),
+    hjust=ifelse(
+      limit=="min.log.lambda", 0, 1)),
+    data=data.frame(zoom.target.tall, variable="errors"),
+    vjust=-1)+
+  geom_point(aes(
+    value,
+    errors,
+    fill=limit),
+    shape=21,
+    size=4,
+    data=data.frame(zoom.target.tall, variable="errors"))+
+  scale_fill_manual("limit", values=c(
+    min.log.lambda="black",
+    max.log.lambda="white"))+
+  theme(
+    legend.position="bottom",
+    legend.box="horizontal")
 
+## Exercise 5:
