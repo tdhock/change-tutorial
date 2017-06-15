@@ -1910,11 +1910,11 @@ with improved changepoint detection accuracy.
 **Remark 2:** To learn the most accurate model, it is best to use all
   training data (instead of holding out some of the labels as a test
   set). The
-  [figure-neuroblastoma-predictions.R](figure-neuroblastoma-predictions.R)
+  [figure-neuroblastoma-predictions.R](https://github.com/tdhock/change-tutorial/blob/master/figure-neuroblastoma-predictions.R)
   script fits an IntervalRegressionCV model to the entire
   neuroblastoma data set, uses the model to predict changepoints for
   all data sequences (even those without labels), then
-  [plots the predicted changepoints along with the train errors](figure-neuroblastoma-predictions.R). Some
+  [plots the predicted changepoints along with the train errors](figure-neuroblastoma-predictions.png). Some
   overfitting/extrapolation errors are evident. For example some chrY
   sequences have too many changes --- this could be fixed by add some
   negative/normal labels on those sequences.
@@ -1930,6 +1930,6 @@ test set.
 **Exercise after class:** is the logistic or Gaussian distribution a
   more accurate model for the log(penalty) values? In the code block
   above, add some code for computing the model predictions and error
-  rates for `survreg(dist="logistic")`. Then re-do the plots below --
-  there should be 4 models.
+  rates for `survreg(dist="logistic")`. Then re-do the plots in this
+  section -- there should be 4 models instead of 3 in the last plot.
 
