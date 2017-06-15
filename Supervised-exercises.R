@@ -42,7 +42,7 @@ unsupervised.error.list <- penaltyLearning::labelError(
   problem.vars=c("profile.id", "chromosome"),
   model.vars="pen.name",
   change.var="change")
-ggplot()+
+gg.supervised <- ggplot()+
   unsupervised.error.list$model.errors[, ggtitle(paste0(
     "Unsupervised ", pen.name, " penalty has ",
     sum(errors),
@@ -74,7 +74,8 @@ ggplot()+
     "1change"="#ff7d7d",
     breakpoint="#a445ee",
     normal="#f6c48f"
-  ))+
+  ))
+gg.supervised+
   geom_vline(aes(
     xintercept=change/1e6),
     color="green",
@@ -265,4 +266,154 @@ ggplot()+
     legend.position="bottom",
     legend.box="horizontal")
 
-## Exercise 5:
+## Exercise 3:
+feature.mat <- penaltyLearning::featureMatrix(
+  six.profiles,
+  problem.vars=c("profile.id", "chromosome"),
+  data.var="logratio")
+feature.name <- "n.loglog"
+six.features.dt <- six.profiles[, list(
+  feature=feature.mat[paste(profile.id, chromosome), feature.name]
+), by=list(profile.id, chromosome)]
+setkey(six.profiles, profile.id, chromosome)
+six.segs.list <- list()
+six.selection.list <- list()
+for(problem.i in 1:nrow(six.features.dt)){
+  meta <- six.features.dt[problem.i,]
+  pro <- six.profiles[meta]
+  max.segments <- min(nrow(pro), 10)
+  fit <- Segmentor3IsBack::Segmentor(
+    pro$logratio, model=2, Kmax=max.segments)
+  rss.vec <- rep(NA, max.segments)
+  for(n.segments in 1:max.segments){
+    end <- fit@breaks[n.segments, 1:n.segments]
+    seg.mean.vec <- fit@parameters[n.segments, 1:n.segments]
+    data.before.change <- end[-n.segments]
+    data.after.change <- data.before.change+1
+    pos.before.change <- as.integer(
+      (pro$position[data.before.change]+pro$position[data.after.change])/2)
+    start <- c(1, data.after.change)
+    chromStart <- c(pro$position[1], pos.before.change)
+    chromEnd <- c(pos.before.change, max(pro$position))
+    data.mean.vec <- rep(seg.mean.vec, end-start+1)
+    rss.vec[n.segments] <- sum((pro$logratio-data.mean.vec)^2)
+    six.segs.list[[paste(problem.i, n.segments)]] <- data.table(
+      meta,
+      n.segments,
+      start,
+      end,
+      chromStart,
+      chromEnd,
+      mean=seg.mean.vec)
+  }
+  loss.dt <- data.table(
+    meta,
+    n.segments=1:max.segments,
+    loss=rss.vec)
+  six.selection.list[[problem.i]] <- penaltyLearning::modelSelection(
+    loss.dt, complexity="n.segments")
+}
+six.selection <- do.call(rbind, six.selection.list)
+six.segs <- do.call(rbind, six.segs.list)
+six.changes <- six.segs[1 < start]
+
+six.error.list <- penaltyLearning::labelError(
+  six.selection, six.labels, six.changes,
+  problem.vars=c("profile.id", "chromosome"))
+six.targets <- penaltyLearning::targetIntervals(
+  six.error.list$model.errors,
+  problem.vars=c("profile.id", "chromosome"))
+six.targets.tall <- data.table::melt(
+  six.targets,
+  measure.vars=c("min.log.lambda", "max.log.lambda"),
+  variable.name="limit",
+  value.name="log.lambda")[is.finite(log.lambda)]
+
+
+six.features.tall <- six.features.dt[six.targets.tall, on=list(
+  profile.id, chromosome)]
+six.gg.limits <- ggplot()+
+  geom_point(aes(
+    feature, log.lambda, fill=limit),
+    shape=21,
+    data=six.features.tall)+
+  scale_fill_manual("limit", values=c(
+    min.log.lambda="black",
+    max.log.lambda="white"),
+    breaks=c("max.log.lambda", "min.log.lambda"))+
+  scale_x_continuous(
+    paste("input feature:", feature.name))+
+  scale_y_continuous(
+    "output log(penalty)=log(lambda)")
+print(six.gg.limits)
+
+library(survival)
+six.features.targets <- six.features.dt[six.targets, on=list(
+  profile.id, chromosome)]
+fit.survreg <- survreg(
+  Surv(min.log.lambda, max.log.lambda, type="interval2") ~ feature,
+  six.features.targets, dist="gaussian")
+survreg.line.dt <- data.table(t(coef(fit.survreg)), model="survreg")
+six.survreg.pred <- data.table(six.features.dt)
+six.survreg.pred[, model := "survreg"]
+six.survreg.pred[, pred.log.lambda := predict(fit.survreg, six.survreg.pred)]
+six.survreg.res <- six.survreg.pred[six.features.targets, on=list(
+  profile.id, chromosome)]
+six.survreg.res[, residual := 0]
+six.survreg.res[{
+  is.finite(min.log.lambda)|is.finite(max.log.lambda)
+}, residual := {
+  penaltyLearning::targetIntervalResidual(
+    cbind(min.log.lambda, max.log.lambda), pred.log.lambda)
+}]
+
+six.gg.limits+
+  geom_abline(aes(
+    slope=feature, intercept=`(Intercept)`, color=model),
+    size=1,
+    data=survreg.line.dt)+
+  geom_segment(aes(
+    feature, pred.log.lambda,
+    xend=feature, yend=pred.log.lambda-residual,
+    color=model),
+    data=six.survreg.res)
+
+six.survreg.pred[, pred.log.penalty := pred.log.lambda]
+six.survreg.selection <- data.table(six.selection)[six.survreg.pred, on=list(
+  profile.id, chromosome,
+  min.log.lambda < pred.log.lambda,
+  max.log.lambda > pred.log.lambda)]
+six.survreg.errors <- six.error.list$model.errors[six.survreg.selection, on=list(
+  profile.id, chromosome, n.segments), nomatch=0L]
+
+six.survreg.labels <- six.error.list$label.errors[six.survreg.selection, on=list(
+  profile.id, chromosome, n.segments), nomatch=0L]
+six.survreg.changes <- six.changes[six.survreg.selection, on=list(
+  profile.id, chromosome, n.segments), nomatch=0L]
+six.survreg.segs <- six.segs[six.survreg.selection, on=list(
+  profile.id, chromosome, n.segments)]
+gg.supervised+
+  ggtitle("survreg 1 feature model changepoints and label errors")+
+  penaltyLearning::geom_tallrect(aes(
+    xmin=min/1e6,
+    xmax=max/1e6,
+    linetype=status),
+    fill=NA,
+    data=six.survreg.labels)+
+  scale_linetype_manual("error type", values=c(
+    correct=0,
+    "false negative"=3,
+    "false positive"=1))+
+  geom_vline(aes(
+    xintercept=chromStart/1e6),
+    data=six.survreg.changes,
+    color="green",
+    size=1,
+    linetype="dashed")+
+  geom_segment(aes(
+    chromStart/1e6, mean,
+    xend=chromEnd/1e6, yend=mean),
+    data=six.survreg.segs,
+    size=1,
+    color="green")+
+  theme(legend.box="horizontal")

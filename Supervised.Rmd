@@ -230,7 +230,7 @@ pen.name <- "SIC0"
     pen.name,
     pen.value=fit.pelt@pen.value,
     changes=list(
-    (position[before.change]+position[after.change])/2
+    as.integer((position[before.change]+position[after.change])/2)
     ))
 }, by=list(profile.id, status.profile, chromosome)])
 ```
