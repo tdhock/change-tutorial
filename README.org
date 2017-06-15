@@ -4,18 +4,15 @@ Rebecca Killick.
 
 Rebecca: Unsupervised changepoint detection, 90 minutes. TODO links.
 
-Toby: [[http://members.cbio.mines-paristech.fr/~thocking/change-tutorial/Supervised.html][Supervised changepoint detection]], 90 minutes. source:
-[[file:Supervised.Rmd]]. Options to follow along:
-- Recommended: run the code on Rcloud
-  https://rcloud.social/edit.html?notebook=699c9c7c6f47ce56358d6d9b8e548835
-  (make sure to click the fork so you can makes changes).
-- Rstudio: download
-  https://raw.githubusercontent.com/tdhock/change-tutorial/master/Supervised.Rmd
-  and open in Rstudio
-  (maybe problems if you have old versions of R/packages).
+Toby: [[http://members.cbio.mines-paristech.fr/~thocking/change-tutorial/Supervised.html][Supervised changepoint detection]], 90 minutes. To follow along,
+open the two links below.
 - Look at the rendered Rmd
   http://members.cbio.mines-paristech.fr/~thocking/change-tutorial/Supervised.html
-  and copy/paste into R on your computer.
+  source: [[file:Supervised.Rmd]]
+- Do the exercises during class on this Rcloud notebook
+  https://rcloud.social/edit.html?notebook=3e66297efb401bc0c6333ad517804f85
+  (make sure to click the fork so you can makes changes).
+  source: [[file:Supervised-exercises.R]]
 
 ** TODOs
 

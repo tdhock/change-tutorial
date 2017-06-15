@@ -7,15 +7,11 @@ output:
     toc_depth: 2
 ---
 
-GitHub repository: https://github.com/tdhock/change-tutorial
+See the GitHub repository for links to source code and exercises:
+https://github.com/tdhock/change-tutorial
 
-Download this
-[Rmd](https://raw.githubusercontent.com/tdhock/change-tutorial/master/Supervised.Rmd)
-and follow along by executing the code blocks using Rstudio (may have
-version problems) or [Rcloud](https://rcloud.social/edit.html)
-(probably fewer problems).
-
-Before starting this tutorial, make sure to install the required packages:
+Before executing the code in this tutorial Rmd, make sure to install
+the required packages:
 
 ```{r packages}
 packages.R <- if(file.exists("packages.R")){
@@ -318,7 +314,7 @@ obvious. This is the main motivation of supervised changepoint
 analysis: we can use labels to learn a penalty function with improved
 changepoint detection accuracy.
 
-**Exercise during class:** try changing the `pen.name` variable above
+**Exercise 1 during class:** try changing the `pen.name` variable 
 to another theretically-motivated unsupervised penalty. Other options
 from `help(cpt.mean)` are SIC (without a zero), MBIC, AIC, and
 Hannan-Quinn. Can you find a penalty with improved changepoint
@@ -327,9 +323,6 @@ profile IDs from 1 to 603) to see the changepoints and label errors
 for another set of profiles.
 
 ## Creating labels via visual inspection
-
-**Exercise after class:** create a set of labels via visual
-inspection, by following the instructions in this section. 
 
 To quickly create labels for many data sequences, I recommend using a
 GUI in which you can use the mouse to draw label rectangles on the
@@ -968,6 +961,10 @@ data sequence.
 only one limit per data sequence? (only one target limit point per
 panel in the plot above)
 
+**Exercise 2 during class:** create a set of labels via visual
+inspection, and visualize how changing the labels affects the
+computation of the target interval.
+
 ## Inputs
 
 To train a machine learning model, we first need to compute a vector
@@ -1426,10 +1423,12 @@ gg.supervised+
 The false positive and false negative predictions are evident in the
 plot above.
 
-**Exercise during class:** the survreg model above assumed a Gaussian distribution
-for the log(penalty) values. Would using another distribution increase
-accuracy? Hint: try re-doing the analyses in this section with the
-`survreg(dist="logistic")` model. For other choices, see `help(survreg)`.
+**Exercise 3 during class:** the survreg model above assumed a
+Gaussian distribution for the log(penalty) values. Would using another
+distribution increase accuracy? Hint: try re-doing the analyses in
+this section with the `survreg(dist="logistic")` model. For other
+choices, see `help(survreg)`. Also try other input features from
+`feature.mat`.
 
 **Exercise after class:** for one of the neuroblastoma data sequences
 plotted above, verify that `changepoint::cpt.mean(data.vec,
@@ -1647,7 +1646,7 @@ in the model.
 ### Other methods
 
 **Exercise after class:** try one of these other interval regression
-algorithms, and see if you can get better results.
+algorithms, and see if you can learn a more accurate penalty function.
 
 * [iregnet](https://github.com/anujkhare/iregnet), elastic net
   regularized Accelerated Failure Time models.
@@ -1847,13 +1846,26 @@ cv.roc <- do.call(rbind, cv.roc.list)
 
 Note that in the code above, we used `cv.roc.list` to save the ROC
 curve for each model and test fold, and we used `cv.auc.list` to save
-AUC. 
+AUC. We plot the ROC curves below in order to visualize what kinds of
+errors the models commit (false positives or false negatives).
 
-**Exercise after class:** is the logistic or Gaussian distribution a
-  more accurate model for the log(penalty) values? In the code block
-  above, add some code for computing the model predictions and error
-  rates for `survreg(dist="logistic")`. Then re-do the plots below --
-  there should be 4 models.
+```{r cv-roc-curves}
+ggplot()+
+  scale_color_manual(values=model.colors)+
+  geom_path(aes(
+    FPR, TPR, color=model, group=paste(model, test.fold)),
+    data=cv.roc)+
+  geom_point(aes(
+    FPR, TPR, color=model),
+    fill="white",
+    shape=21,
+    data=cv.auc)+
+  coord_equal(xlim=c(0, 0.5), ylim=c(0.5, 1))
+```
+
+It is clear from the ROC curves above that the BIC/SIC model has a
+relatively low true positive rate (high false negative rate -- many
+breakpoint/positive labels with no predicted changepoints).
 
 Below we compute and plot two accuracy metrics, AUC and percent
 incorrectly predicted labels.
@@ -1882,9 +1894,9 @@ ggplot()+
 
 It is clear from the plot above that survreg is significantly more
 accurate than BIC/SIC, and IntervalRegressionCV is slightly more
-accurate than survreg.
+accurate than survreg. 
 
-**Remark:** the accuracy rates above (BIC/SIC predicts 92% correct
+**Remark 1:** the accuracy rates above (BIC/SIC predicts 92% correct
 labels whereas survreg and IntervalRegressionCV predict 97-98% correct
 labels) are specific to the neuroblastoma data set. However, in
 general you can expect that unsupervised penalty functions like
@@ -1893,26 +1905,17 @@ IntervalRegressionCV. This is the main motivation of supervised
 changepoint analysis: we can use labels to learn a penalty function
 with improved changepoint detection accuracy.
 
-We can also plot the ROC curves, to visualize what kinds of errors the
-models commit (false positives or false negatives).
-
-```{r cv-roc-curves}
-ggplot()+
-  scale_color_manual(values=model.colors)+
-  geom_path(aes(
-    FPR, TPR, color=model, group=paste(model, test.fold)),
-    data=cv.roc)+
-  geom_point(aes(
-    FPR, TPR, color=model),
-    fill="white",
-    shape=21,
-    data=cv.auc)+
-  coord_equal(xlim=c(0, 0.5), ylim=c(0.5, 1))
-```
-
-It is clear from the ROC curves above that the BIC/SIC model has a
-relatively low true positive rate (high false negative rate -- many
-breakpoint/positive labels with no predicted changepoints).
+**Remark 2:** To learn the most accurate model, it is best to use all
+  training data (instead of holding out some of the labels as a test
+  set). The
+  [figure-neuroblastoma-predictions.R](figure-neuroblastoma-predictions.R)
+  script fits an IntervalRegressionCV model to the entire
+  neuroblastoma data set, uses the model to predict changepoints for
+  all data sequences (even those without labels), then
+  [plots the predicted changepoints along with the train errors](figure-neuroblastoma-predictions.R). Some
+  overfitting/extrapolation errors are evident. For example some chrY
+  sequences have too many changes --- this could be fixed by add some
+  negative/normal labels on those sequences.
 
 **Conclusion:** in **labeled data sequences with a common signal/noise
 pattern**, supervised learning algorithms can be used to predict
@@ -1921,3 +1924,10 @@ unsupervised methods**. An advantage of the supervised learning
 approach is that we can **quantitatively evaluate** the learned models
 by counting the number of incorrectly predicted labels in a held-out
 test set.
+
+**Exercise after class:** is the logistic or Gaussian distribution a
+  more accurate model for the log(penalty) values? In the code block
+  above, add some code for computing the model predictions and error
+  rates for `survreg(dist="logistic")`. Then re-do the plots below --
+  there should be 4 models.
+
