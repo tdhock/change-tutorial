@@ -1065,8 +1065,7 @@ and intercept 0, and we can visualize its errors using the vertical
 line segments below.
 
 ```{r sixBIC}
-six.features.targets <- six.BIC.dt[six.targets, on=list(
-                                                  profile.id, chromosome)]
+six.features.targets <- six.BIC.dt[six.targets, on=list(profile.id, chromosome)]
 six.features.targets[, residual := 0]
 six.features.targets[{
   is.finite(min.log.lambda)|is.finite(max.log.lambda)
@@ -1722,7 +1721,8 @@ ggplot()+
   geom_point(aes(
     FPR, TPR, color=model),
     size=3,
-    data=auc)
+    data=auc)+
+  coord_equal()
 ```
 
 However, with so few labels, and only one test set, it is
