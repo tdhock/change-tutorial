@@ -82,7 +82,8 @@ works_with_R(
   data.table=c("1.10.4", "1.10.5"),
   survival=c("2.41.2", "2.41.3"),
   ggplot2=c("2.1.0", "2.2.1"),
+  geometry="0.3.6",#for ROChange
   ##penaltyLearning="2017.5.8"
-  "tdhock/penaltyLearning@dcdf16147ed9be1689e2b8e120cd3135165eaafd"
+  "tdhock/penaltyLearning@656ee039abe61a7c1ed707fa537ee1174e581a0e"
   )
 future::plan(multiprocess)
