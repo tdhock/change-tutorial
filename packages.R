@@ -14,7 +14,7 @@ if(!r.forge %in% old.repos.vec){
 ## Install a new version if we have old versions of these packages.
 install.if.old <- function(pkg, vers){
   unloadNamespace(pkg)
-  if(require(pkg) && packageVersion(pkg) < vers){
+  if(require(pkg, character.only=TRUE) && packageVersion(pkg) < vers){
     install.packages(pkg)
   }
 }

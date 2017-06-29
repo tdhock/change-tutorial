@@ -96,7 +96,10 @@ someProfiles <- function(all.profiles){
     is.na(status.profile), paste(some$profile.id), status.profile)
   data.table(some)
 }
-six.profiles <- someProfiles(neuroblastoma$profiles)
+neuroblastoma.dt <- data.table(neuroblastoma$profiles)
+neuroblastoma.dt[, logratio.norm := logratio/mad(logratio), by=list(
+  profile.id, chromosome)]
+six.profiles <- someProfiles(neuroblastoma.dt)
 ```
 
 For these six patients, the total number of separate changepoint
@@ -218,7 +221,7 @@ to save a description of the model in a "tidy" data.frame
 pen.name <- "SIC0"
 (unsupervised.models <- six.profiles[, {
   fit.pelt <- changepoint::cpt.mean(
-    logratio, penalty=pen.name, method="PELT")
+    logratio.norm, penalty=pen.name, method="PELT")
   end <- fit.pelt@cpts
   before.change <- end[-length(end)]
   after.change <- before.change+1L
@@ -341,9 +344,8 @@ data set by itself to see the details of the signal and noise.
 ```{r zoom}
 zoom.profile <- 4     #Exercise: change this value!
 zoom.chromosome <- 14 #Exercise: change this value!
-zoom.pro <- subset(
-  neuroblastoma$profiles,
-  profile.id==zoom.profile & chromosome==zoom.chromosome)
+zoom.pro <- neuroblastoma.dt[
+  profile.id==zoom.profile & chromosome==zoom.chromosome]
 zoom.gg <- ggplot()+
   geom_point(aes(position/1e6, logratio),
              data=zoom.pro,
@@ -489,7 +491,7 @@ predicting too many changepoints. More details below in the
 ```{r zoomSegmentor}
 max.segments <- 7
 (fit <- Segmentor3IsBack::Segmentor(
-  zoom.pro$logratio, model=2, Kmax=max.segments))
+  zoom.pro$logratio.norm, model=2, Kmax=max.segments))
 ```
 
 The Segmentor `fit` object is an S4 class with slots
@@ -527,7 +529,7 @@ for(n.segments in 1:max.segments){
     mean=seg.mean.vec)
   data.mean.vec <- rep(seg.mean.vec, end-start+1)
   stopifnot(length(data.mean.vec)==nrow(zoom.pro))
-  zoom.loss.vec[n.segments] <- sum((zoom.pro$logratio-data.mean.vec)^2)
+  zoom.loss.vec[n.segments] <- sum((zoom.pro$logratio.norm-data.mean.vec)^2)
 }
 (zoom.segs <- do.call(rbind, zoom.segs.list))
 ```
@@ -551,19 +553,12 @@ zoom.gg.models <- zoom.gg.lab+
     data=zoom.changes,
     color="green",
     size=1,
-    linetype="dashed")+
-  geom_segment(aes(
-    chromStart/1e6, mean,
-    xend=chromEnd/1e6, yend=mean),
-    data=zoom.segs,
-    size=1,
-    color="green")
+    linetype="dashed")
 print(zoom.gg.models)
 ```
 
 The plot above shows a panel for each model from 1 to 7 segments (0 to
-6 changepoints). Each segment mean is drawn using a green horizontal
-`geom_segment` and each changepoint is drawn using a green dashed
+6 changepoints). Each changepoint is drawn using a green dashed
 `geom_vline`.
 
 For more details about the `Segmentor` function, read the references
@@ -849,7 +844,7 @@ for(problem.i in 1:nrow(six.problems.dt)){
   pro <- six.profiles[meta]
   max.segments <- min(nrow(pro), 10)
   fit <- Segmentor3IsBack::Segmentor(
-    pro$logratio, model=2, Kmax=max.segments)
+    pro$logratio.norm, model=2, Kmax=max.segments)
   rss.vec <- rep(NA, max.segments)
   for(n.segments in 1:max.segments){
     end <- fit@breaks[n.segments, 1:n.segments]
@@ -862,7 +857,7 @@ for(problem.i in 1:nrow(six.problems.dt)){
     chromStart <- c(pro$position[1], pos.before.change)
     chromEnd <- c(pos.before.change, max(pro$position))
     data.mean.vec <- rep(seg.mean.vec, end-start+1)
-    rss.vec[n.segments] <- sum((pro$logratio-data.mean.vec)^2)
+    rss.vec[n.segments] <- sum((pro$logratio.norm-data.mean.vec)^2)
     six.segs.list[[paste(problem.i, n.segments)]] <- data.table(
       meta,
       n.segments,
@@ -1143,12 +1138,6 @@ gg.supervised+
     color="green",
     size=1,
     linetype="dashed")+
-  geom_segment(aes(
-    chromStart/1e6, mean,
-    xend=chromEnd/1e6, yend=mean),
-    data=six.BIC.segs,
-    size=1,
-    color="green")+
   theme(legend.box="horizontal")
 ```
 
@@ -1412,12 +1401,6 @@ gg.supervised+
     color="green",
     size=1,
     linetype="dashed")+
-  geom_segment(aes(
-    chromStart/1e6, mean,
-    xend=chromEnd/1e6, yend=mean),
-    data=six.survreg.segs,
-    size=1,
-    color="green")+
   theme(legend.box="horizontal")
 ```
 
@@ -1621,12 +1604,6 @@ gg.supervised+
     color="green",
     size=1,
     linetype="dashed")+
-  geom_segment(aes(
-    chromStart/1e6, mean,
-    xend=chromEnd/1e6, yend=mean),
-    data=six.cv.segs,
-    size=1,
-    color="green")+
   theme(legend.box="horizontal")
 ```
 
