@@ -1,0 +1,615 @@
+---
+title: "Introduction to optimal changepoint detection algorithms"
+author: "Rebecca Killick(r.killick@lancs.ac.uk)"
+date: "useR! Tutorial 2017"
+output:
+  html_document: 
+    toc: true
+    toc_depth: 2
+---
+
+See the GitHub repository for links to source code and exercises:
+https://github.com/tdhock/change-tutorial
+
+There are tasks throughout the sections.  You may not get time to complete all the tasks within the workshop but feel free to contact me after the workshop if you require support.
+
+
+Before executing the code in this tutorial Rmd, make sure to install
+the required packages:
+
+```{r packages}
+if(!require(changepoint)){
+  install.packages('changepoint')
+}
+library(changepoint)
+if(!require(changepoint.np)){
+  install.packages('changepoint.np')
+}
+library(changepoint.np)
+```
+
+
+# What are Changepoints?
+Changepoint analysis for time series is an increasingly important aspect of statistics.  Simply put, a changepoint is an instance in time where the statistical properties before and after this time point differ.  With potential changes naturally occurring in data and many statistical methods assuming a "no change" setup, changepoint analysis is important in both applied and theoretical statistics.  
+
+The first published article concerning changepoints was in 1954 by E.S. Page. This considered testing for a potential single changepoint for data from a common parametric distribution and was motivated by a quality control setting in manufacturing. Over the decades, changepoint analysis has developed rapidly with multiple changepoints, different types of data and other assumptions being considered.
+
+Changepoints also appear under a variety of synonyms across a variety of scientific fields. This includes segmentation, structural breaks, break points, regime switching and detecting disorder.
+Changepoints can be found in a wide range of literature including quality control, economics, medicine, environment, linguistics, \ldots.
+
+Mathematically speaking, for data $z_1, \ldots, z_n$, if a changepoint exists at $\tau$, then $z_1,\ldots,z_{\tau}$ differ from $z_{\tau+1},\ldots,z_n$ in some way.  There are many different types of change.
+  
+```{r, echo=F, out.width='300px'}
+par(mar=c(4,4,.3,.3)) 
+set.seed(1)
+# Change in mean example following EFK
+x=1:500
+z=c(rnorm(100,1,sd=0.5),rnorm(150,0,sd=0.5),rnorm(200,2,sd=0.5),rnorm(50,0.5,sd=0.5))
+plot(x,z,type='l',xlab='',ylab='')
+lines(x=1:100,y=rep(1,100),col='red',lwd=3)
+lines(x=101:250,y=rep(0,150),col='red',lwd=3)
+lines(x=251:450,y=rep(2,200),col='red',lwd=3)
+lines(x=451:500,y=rep(0.5,50),col='red',lwd=3)
+# Change in variance example following EFK
+x=1:500
+z=c(rnorm(100,0,sd=0.1),rnorm(150,0,sd=0.7),rnorm(200,0,sd=0.25),rnorm(50,0,sd=1))
+plot(x,z,type='l',xlab='',ylab='')
+# Change in regression
+x=1:500
+z=c(0.01*x[1:100],1.5-0.02*(x[101:250]-101),(10^-5)*(-150000+2.5*(x[251:450]^2-251^2)-(x[251:450]-250)),rep(1,50))
+znoise=z+rnorm(500,0,0.2)
+plot(x,znoise,type='l',xlab='',ylab='')
+lines(x=1:100,y=0.01*x[1:100],lwd=3,col='red')
+lines(x=101:250,y=1.5-0.02*(x[101:250]-101),lwd=3,col='red')
+lines(x=251:450,y=(10^-5)*(-150000+2.5*(x[251:450]^2-251^2)-(x[251:450]-250)),lwd=3,col='red')
+lines(x=451:500,y=rep(1,50),lwd=3,col='red')
+```
+
+### What is the goal in changepoint analysis?
+There are many questions that a researcher may have in mind when conducting a changepoint analysis.  Some of these include:
+
+* Has a change occurred?
+* If yes, where is the change?
+* What is the difference between the pre and post change data?
+    + This may be the type of change
+    + and/or the parameter values before and after the change.
+* What is the probability that a change has occured?
+* How certain are we of the changepoint location?
+* How many changes have occurred (+ all the above for each change)?
+* Why has there been a change?
+
+
+### Notation and concepts
+Given the above definition of a changepoint, a change in mean has the following formulation:
+$$
+z_t = \left\{ \begin{array}{lcl} \mu_1 & \mbox{if} & 1\leq t \leq \tau_1 \\
+          \mu_2 & \mbox{if} & \tau_1 < t \leq \tau_2 \\
+          \vdots & & \vdots \\
+          \mu_{k+1} & \mbox{if} & \tau_k < t \leq \tau_{k+1}=n \end{array} \right.
+$$
+You can conceive of changes in all manner of parameters or in entire distributions.  The following plots depict more complicated types of change.  Can you guess where the changes are and what properties are changing?
+
+```{r, echo=F,out.width=450}
+set.seed(1)
+par(mar=c(4,4,.3,.3)) 
+# Change in ar example
+x=1:500
+z=c(arima.sim(model=list(ar=0.8),n=100),arima.sim(model=list(ar=c(0.5,0.2)),n=150),arima.sim(model=list(ar=c(-0.2)),n=200),arima.sim(model=list(ar=c(-0.5)),n=50))
+plot(x,z,type='l',xlab='',ylab='')
+# Change in seasonality and noise
+x=1:500
+z=c(sin(x[1:250]/21)+cos(x[1:250]/21),sin((1.1*x[251:500]/15))+cos((1.1*x[251:500]/15)))
+znoise=z+c(rnorm(100,0,sd=0.1),rnorm(150,0,sd=0.25),rnorm(200,0,sd=0.3),rnorm(50,0,sd=.4))
+plot(x,znoise,type='l',xlab='',ylab='')
+```
+
+## Online vs Offline
+There are subtle differences between online and offline changepoint analysis.  Online changepoint analysis is often used in areas such as quality control or intrusion detection, forms of constant monitoring.  In online changepoint analysis
+
+* data arrives either as single datapoints or in batches;
+* data must be processed quickly "on the fly" before new data arrives;
+* the aim is the quickest detection of a change after it has occured;
+* tend to make inference about most recent change only.
+
+In contrast offline detection is often used in areas such as genome analysis, linguistics, audiology.  In offline changepoint analysis
+
+* all data is received and processed in one go;
+* the primary aim is accurate detection of changes;
+* all changes may be of interest.
+
+This tutorial will cover offline changepoint detection, although the PELT algorithm (described below) can be used in an online context with specificed false alarm rates.
+
+In the plot below the left is an example of online changepoint detection where we receive one datapoint at a time and the red line is the point at which we flag a change at the black line.  In contrast on the right we have all the data and determine there is a change at the black line.
+```{r, echo=F,out.width=450}
+set.seed(1)
+par(mar=c(4,4,.3,.3)) 
+x=1:110
+z=c(rnorm(100),rnorm(10,2,1))
+# online example
+library(cpm)
+cpm=detectChangePoint(z,cpmType="Student")
+plot(x,z,type='n',xlab='',ylab='')
+lines(x[1:cpm$detectionTime],z[1:cpm$detectionTime])
+lines(x[(cpm$detectionTime+1):110],z[(cpm$detectionTime+1):110],lty=5,col='grey')
+abline(v=cpm$changePoint)
+abline(v=cpm$detectionTime,col='red')
+#offline example
+plot(x,z,type='l',xlab='',ylab='')
+cpt=cpt.mean(z)
+abline(v=cpts(cpt))
+```
+
+
+### Packages
+This tutorial explores the `changepoint` and `changepoint.np` packages.  Other notable `R` packages are available for changepoint analysis including
+
+* `strucchange` - for changes in regression
+* `bcp` - if you want to be Bayesian
+* `cpm` - for online changes (`changepoint.online` coming soon)
+* `EnvCpt` - for testing between changes in mean, trend and/or AR(1) structure
+
+
+
+# Single Changepoint
+Assume we have time-series data where
+$$
+Z_t|\theta_t \sim \mbox{N}(\theta_t,1),
+$$
+but where the means, $\theta_t$, are piecewise constant through time.  Here is an example.
+
+
+
+```{r, echo=FALSE, out.width=450}
+# Change in mean example following EFK
+x=1:500
+z=c(rnorm(200,1,sd=0.5),rnorm(300,0,sd=0.5))
+plot(x,z,type='l',xlab='',ylab='')
+lines(x=1:200,y=rep(1,200),col='red',lwd=3)
+lines(x=201:500,y=rep(0,300),col='red',lwd=3)
+```
+
+We want to infer the number and position of the points at which the mean changes. Changepoint detection determines if observations are different and as such it is natural to compare model fits with changepoints to those without.  One approach is to use a **Likelihood Ratio Test**.
+	
+To detect a single changepoint we can use the (log-)likelihood ratio test statistic:
+$$
+LR=\max_\tau\{\ell(z_{1:\tau})+\ell(z_{\tau+1:n})-\ell(z_{1:n})\}.
+$$
+
+The (log-)likelihood of the model including a change will always provide an improvement over the model with no change; additional parameters always improve the fit. Thus we infer a changepoint if $LR>\lambda$ for some (suitably chosen) $\lambda$ - this is called the penalty. If we infer a changepoint its position is estimated as 
+$$
+\tau=\arg \max \{\ell(z_{1:\tau})+\ell(z_{\tau+1:n})-\ell(z_{1:n})\}.
+$$
+This type of comparison is the essence behind almost all changepoint techniques, even where the (log-)likelihood isn't used as the metric for comparison.
+
+If we are thinking in a (log-)likelihood context then some key initial questions arise:
+
+* what model do I use?
+* what parameters of my model are changing?
+
+We will not really discuss these choices in this tutorial.  One would typically inspect the data via time series plots or similar to ascertain appropriate model choices.  In this tutorial we discuss the model options available in the `changepoint` and `changepoint.np` packages.
+
+## `changepoint` R package
+The `changepoint` R package contains 3 core wrapper functions:
+
+* `cpt.mean` - mean only changes
+* `cpt.var` - variance only changes
+* `cpt.meanvar` - mean and variance changes
+
+The package also contains:
+
+* functions/methods for the `cpt` S4 class
+* 5 data sets
+* Other R functions that are made available for those who know what they are doing and might want to extend/modify the package.
+
+The core functions `cpt.mean`, `cpt.var`, `cpt.meanvar` output an object of `cpt` class (unless `class=FALSE` is set).  This is an S4 class containing all the information from the analysis including for example: the data (`data.set`), inputs set (`pen.value`,`ncpts.max`), outputs (`cpts`, `param.est`).  The slots are accessed via their names e.g. `cpts(x)`.  There are also several standard methods available for the class e.g. `plot`, `summary`.  Additional generic functions specific to changepoints are also available including:
+
+* `seg.len` which returns the lengths of the segments between changepoints;
+* `ncpts` which returns the number of changepoints identified.
+
+The tutorial covers each core function and the arguments within them through examples.
+
+##  `cpt.mean`
+The `cpt.mean` function is structured as follows:
+
+`cpt.mean(data, penalty="MBIC", pen.value=0, method="AMOC", Q=5, test.stat="Normal", class=TRUE, param.estimates=TRUE,minseglen=1)`
+
+* `data` - vector or `ts` object
+* `penalty` - value used to ascertain what are material changes and what are not, options include: MBIC, SIC, BIC, AIC, Hannan-Quinn, Asymptotic, Manual. 
+* `pen.value` - Type I error for Asymptotic, number or character to be evaluated for manual penalties.
+* `method` - AMOC, PELT, SegNeigh, BinSeg.
+* `Q` - max number of changes for SegNeigh or BinSeg.
+* `test.stat` - Test statistic, Normal or CUSUM.
+* `class` - return a `cpt` object or not.
+* `param.estimates` - return parameter estimates or not.
+* `minseglen` - minimum number of data points between changes.
+
+
+### Single Change in Mean
+First we simulate some Normal distributed data with a single change in mean.
+```{r, out.width=300}
+set.seed(1)
+m1=c(rnorm(100,0,1),rnorm(100,5,1))
+m1.amoc=cpt.mean(m1)
+cpts(m1.amoc)
+m1.cusum=cpt.mean(m1,pen.value=1,penalty='Manual',test.stat='CUSUM')
+```
+The above code uses the default values of a single change (`method="AMOC"`) in a normal distribution (`test.stat="Normal"`) with the MBIC penalty (`penalty="MBIC"`). The resulting changepoint can be retrieved using the `cpts()` function and a plot is produced as follows.
+
+```{r}
+plot(m1.amoc)
+```
+
+## Task: Nile Data
+The data from Cobb (1978), readings of the annual flow volume of the Nile River at Aswan from 1871 to 1970, are available in the `R` `datasets` package (shipped and available by default).
+```{r,out.height=450}
+data(Nile)
+ts.plot(Nile)
+```
+
+It has been hypothesized that there was a change around the turn of the century.
+
+Use the  `cpt.mean` function to see if there is evidence for a change in mean in the Nile river data.  If you identify a change, where is it and what are the pre and post change means?
+
+
+# Multiple Changepoints
+It is quite rare that when analyzing real data you will be confident that the is only a maximum of one changepoint.  In reality you will want to determine if there may be multiple changes in a dataset.  To that end we broaden out notation and define $k$ to be the number of changepoints, with positions $\boldsymbol{\tau}=(\tau_0,\tau_1,\ldots,\tau_{k+1})$ where $\tau_0=0$ and $\tau_{k+1}=n$.
+
+Then we can re-write the Likelihood ratio test as
+$$
+\min_{k\in\{0,1\},\boldsymbol{\tau}} \left\{
+\sum_{i=1}^{k+1} \left[-\ell(z_{\tau_{i-1}:\tau_{i}})\right] + \lambda k \right\}
+$$
+Note that $k\in\{0,1\}$ restricts us to the no change or single change options and the $\lambda$ is still there controlling whether the no change or single change model is preferred.
+
+This formulation is easier to extend to multiple changepoints:
+$$
+\min_{k,\boldsymbol{\tau}} \left\{
+\sum_{i=1}^{k+1} \left[-\ell(z_{\tau_{i-1}:\tau_{i}})\right] + \lambda k \right\}
+$$
+
+This can be viewed as a special case of penalised likelihood. Here the aim
+is to maximise the *(log-)likelihood* over the number and position of the changepoints, but
+*subject to* a penalty, that depends on the number of changepoints. The penalty is to avoid
+over-fitting.
+
+A more generic penalised likelihood approach is
+$$
+\min_{k,\boldsymbol{\tau}} \left\{
+\sum_{i=1}^{k+1} \left[-\ell(z_{\tau_{i-1}:\tau_{i}})\right] + \lambda f(k) \right\}
+$$
+for a suitable penalty function $f(k)$ and penalty constant $\lambda$.  The only change is that our penalty term is more generic than the $\lambda k$ used earlier.
+
+
+All these formulations can be cast in terms of minimising a function of $k$ and $\boldsymbol{\tau}$ of the form:
+\begin{align}
+\sum_{i=1}^{k+1}{\left[\mathcal{C}(z_{(\tau_{i-1}+1):\tau_i})\right] + \lambda f(k)}. \label{eqn:cost}
+\end{align}
+
+This function depends on the data just through a sum of a *cost* for each segment (we have been using negative log-likelihood so far).  There is also a penalty term that depends on the number of changepoints.
+
+### What penalty should I use?
+Several have attempted to answer this question, but in reality have added their own criteria to the list.  At best, we have specific criteria shown to be optimal in very specific settings which are usually difficult to verify in real world data.  Thus the choice of penalty is still an open research question.
+
+
+### The Challenge
+If we want to minimize \ref{eqn:cost} over all possible values of $k$ and $\tau$ this is a huge task.  To get an idea of the size of the solution space:
+
+* For $n$ data points there are $2^{n-1}$ possible solutions
+* If $k$ is known there are still $\binom{n-1}{k-1}$ solutions
+* If $n=1000$ and $k=10$,  $2.634096 \times 10^{21}$ solutions
+
+Thus the question becomes **how do we search the solution space efficiently?**
+
+
+### Methods in the `changepoint` package
+There are currently four methods available within the changepoint package with three minimizing \ref{eqn:cost} over all possible values of $k$ and $\tau$:
+
+* At Most One Change (`AMOC`) - only for single changepoint problems
+
+* Binary Segmenation (`BinSeg`) (Scott and Knott (1974)) which is $\mathcal{O}(n\log n)$ in CPU time. *Approximate* but computationally **fast**
+	
+* Segment Neighbourhood (`SegNeigh`) (Auger and Lawrence (1989)) is $\mathcal{O}(Qn^2)$. *Slower* but **exact**
+
+* Pruned Exact Linear Time (`PELT`) (Killick et al. (2012)) At worst  $\mathcal{O}(n^2)$. For linear penalties $f(k)=k$, scaling changes, $\mathcal{O}(n)$. 
+**Fast** and **exact**
+
+We will focus on the PELT and BinSeg methods over the coming sections as the SegNeigh option gives the same answers to PELT but takes longer to do so (you can check yourself using `system.time()`).
+
+## `cpt.var`
+The majority of arguments for `cpt.var` are the same as for `cpt.mean`. 
+
+`cpt.var(data, penalty, pen.value, know.mean=FALSE, mu=NA, method, Q, test.stat="Normal", class, param.estimates, minseglen=2)`
+
+The additional arguments are:
+
+* `know.mean` - if known we don't count it as an estimated parameter when calculating
+penalties.
+* `mu` - Mean if known.
+* `test.stat` - Normal  or CSS (cumulative sums of squares)
+* `minseglen` - Default is 2
+
+Again we conduct a brief example this time with multiple changes and using the PELT method to identify them.  We also demonstrate a manual penalty identification although it is directly equal to the BIC/SIC penalty.
+```{r,results='hold'}
+set.seed(1)
+v1=c(rnorm(100,0,1),rnorm(100,0,2),rnorm(100,0,10), rnorm(100,0,9))
+v1.man=cpt.var(v1,method='PELT',penalty='Manual',pen.value='2*log(n)')
+cpts(v1.man)
+param.est(v1.man)
+```
+Ratios of true variances (4, 25, 0.81).  Whilst a variance change of 100 to 81 might seem large if you think about it the distributions overlap significantly.  Let's look at the plot and see what is going on, not the customizable width of the changepoint lines.
+
+```{r,out.height=450}
+plot(v1.man,cpt.width=3)
+```
+
+Would you honestly place a change at 300 in this data?  Typically a variance ratio needs to be around 3 in order for likelihood based method to have c. 80% power in detecting it.
+
+
+## `cpt.meanvar`
+Just as for the `cpt.var` and `cpt.mean` core functions.  The `cpt.meanvar` also has a familiar structure.
+
+`cpt.meanvar(data, penalty, pen.value, method, Q, test.stat="Normal", class, param.estimates, shape=1,minseglen=2)`
+
+The different arguments here are:
+
+* `test.stat` - choice of Normal, Gamma, Exponential, Poisson.
+* `shape` - assumed shape parameter for Gamma.
+* `minseglen` - minimum segment length of 2
+
+Let us have a short example of generating and analysing some exponential data.  This time we will use the Binary Segmentation algorithm - recall this gives an approximate answer.
+```{r}
+set.seed(1)
+mv1=c(rexp(50,rate=1),rexp(50,5),rexp(50,2),rexp(50,7))
+mv1.binseg=cpt.meanvar(mv1,test.stat='Exponential',method='BinSeg',Q=10,penalty="SIC")
+cpts(mv1.binseg)
+param.est(mv1.binseg)
+```
+All the changes are recovered (they would also be if you change to PELT).  The addition here is that we need to specify the `Q` argument which gives a maximum number of changepoints that the algorithm will find.  If the solution gives `Q` changepoints a warning will be displayed encouraging you to increase `Q` as there might be more changes that you are missing.
+
+Again we can plot the results, here we demonstrate changing the colour of the changepoint lines too.
+```{r}
+plot(mv1.binseg,cpt.width=3,cpt.col='blue')
+```
+
+## Tasks
+### Task: FTSE100
+The changepoint package contains Yahoo! Finance data of daily returns from FTSE100 index from 2nd April 1984 until the 13th September 2012.
+```{r,out.height=450}
+data(ftse100) # two columns, date and value
+plot(ftse100,type='l',xlab='Date',ylab='Daily Return')
+```
+
+Use the  `cpt.var` function to see if there is evidence for changes in variance in the FTSE100 data.  If you identify changes, where are they and what are the variances in each segment?
+Try changing your penalty value, which segmentation do you prefer?
+
+### Task `cpt.meanvar`
+The changepoint package also contains data from NCBI on G+C content within part of Human Chromosome 1.  For those interested it is taken in 3kb windows along the Human Chromosome from 10Mb to 33Mb.
+
+Use the `cpt.meanvar` function to identify regions with different C+G content.  Try changing your penalty value, which segmentation do you prefer?
+
+```{r,out.width=1000}
+data(HC1)
+ts.plot(HC1)
+```
+
+
+## How many changes?
+As our last two examples demonstrate, it can be difficult to decide on a penalty value.  Often you might try a couple and want a penalty between so you might try manual penalties to find a solution that you are happy with.  This creates an unnecessary computational and time consuming burden as for many penalty values the segmentation is the same.
+
+Enter CROPS: **C**hangepoints for a **r**ange **o**f **p**enaltie**s**
+
+Using `penalty='CROPS'` with `method='PELT'` you can specify minimum and maximum penalty values and it returns all segmentations for any penalty between these values.  These are computed in an efficient manner with a very small number of runs of the PELT algorithm.  Once all the segmentations have been calculated we can then decide on the number of changepoints.
+
+```{r}
+v1.crops=cpt.var(v1,method="PELT",penalty="CROPS",pen.value=c(5,500))
+```
+Recall that there were 3 true changes in `v1` but that the third change was relatively small and so we don't have enough power to detect it.
+```{r}
+cpts.full(v1.crops)
+```
+Note that we use `cpts.full()` instead of `cpts()` to get the range of segmentations.  Interestingly there is no segmentation for which 6 changepoints is optimal.  This can demonstrate situations (often around outliers or short anomalous segments) where two changepoints need to be included or neither.  Here the short segment 375 to 379 covers a period of relatively small variation.
+
+We can see that when up to 8 changes are in the model we still don't have any changes around point 300.
+
+We can also retrieve the penalty boundary points where the segmentation switches from a smaller to larger number of changepoints using `pen.value.full()`.  When using Binary Segmentation or CROPS as a range of changepoints are given as ouput we can use an additional argument in the `plot` generic which allows us to select how many changes we want in the segmentation plotted.
+```{r,out.height=450}
+pen.value.full(v1.crops)
+plot(v1.crops,ncpts=5)
+```
+
+Note that if you choose say `ncpts=6` which doesn't exist then it will error.
+
+Alternatively, if we don't want to visually inspect the segmentations we can construct a diagnostic plot in the following way.
+```{r,out.height=450}
+plot(v1.crops,diagnostic=TRUE)
+```
+The intuition behind this is that if a true changepoint is added to the model then the improvement in fit will be large.  Once all the true changes have been added the false changes (due to noise) will not improve the fit much.  Thus in the diagnostic plot we are looking for the elbow (akin to the scree plot in principal components analysis).  See Lavielle (2005) for more details.
+
+Recall that the true number of changes is 3 but that the third change is unlikely to be identified due to the small variance ratio.  It is clear from the diagnostic plot that 2 changes should be chosen here.
+
+<!-- ## Lavielle "Using penalized contrasts for the change-point problem" Siginal Processing (2005) 85:1501-1510 -->
+<!-- For $1\leq K\leq K_{MAX}$: -->
+<!-- $$ -->
+<!-- J_K = \frac{\ell_{K_{MAX}}-\ell_K}{\ell_{K_{MAX}}-\ell_1} \left(K_{MAX}-1\right) + 1 -->
+<!-- $$ -->
+<!-- Then for $2\leq K\leq K_{MAX}-1$: -->
+<!-- \begin{align} -->
+<!-- D_K &= J_{K-1}-2J_K+J_{K+1} \\ -->
+<!-- D_1 &= \infty -->
+<!-- \end{align} -->
+<!-- Then -->
+<!-- $$ -->
+<!-- \hat{K} = \max\{1\leq K\leq K_{MAX}-1 : D_K>C\} -->
+<!-- $$ -->
+<!-- $C$ is the threshold for a change. -->
+
+## `cpt.np`
+The core functions covered thus far are all looking for changes in specific model parameters with specific distributional form.  What if we want to find a general change in distribution?
+
+This is where the `changepoint.np` package comes in.  The package contains a further core function `cpt.np`.
+
+`cpt.np(data, penalty, pen.value, method, test.stat="empirical_distribution", class, minseglen=1, nquantiles=10)`
+
+Note that again the same underlying structure as `cpt.mean` is preserved.  The additional arguments are:
+
+* `test.stat` - choice of empirical_distribution
+* `minseglen` - minimum segment length of 1
+* `nquantiles` - number of quantiles to use
+
+The `empirical_distribution` test statistic allows us to use quantiles of an empirical distrubtion function to identify changes in distribution.  The method automatically choose which quantiles based on the number of quantiles (`nquantiles`).  Obviously a large number of quantiles allows for more subtle changes in distribution to be detected but also required more computational time.  Note that the quantiles are not evenly spread and are weighted more to the tails as this is where changes are often apparent.
+
+Again let us consider an example.
+```{r}
+set.seed(12)
+J <- function(x){(1+sign(x))/2}
+n <- 1000
+tau <- c(0.1,0.13,0.15,0.23,0.25,0.4,0.44,0.65,0.76,0.78,0.81)*n
+h <- c(2.01, -2.51, 1.51, -2.01, 2.51, -2.11, 1.05, 2.16,-1.56, 2.56, -2.11)
+sigma <- 0.5
+t <- seq(0,1,length.out = n)
+data <- array()
+for (i in 1:n){
+   data[i] <- sum(h*J(n*t[i] - tau)) + (sigma * rnorm(1))
+}
+ts.plot(data)
+```
+The default is 10 quantiles but here we demonstrate changing this value (although the same changes are found with 10 quantiles).  In reality we might want to try a few `nquantiles` values to check the sensitivity to this parameter.
+```{r,out.height=450}
+out <- cpt.np(data, method="PELT",minseglen=2, nquantiles =4*log(length(data)))
+cpts(out)
+plot(out)
+```
+
+## Tasks
+
+### Task CROPS
+Look at the FTSE100 data again and use the CROPS technique to determine an appropriate number of changes.
+
+### Task `cpt.np`
+Look at the `HeartRate` data from the `changepoint.np` package.  Use one of the non-parametric functions to see if there is evidence for changes in heart rate.
+```{r}
+data(HeartRate)
+```
+
+# Checking Assumptions (if time allows)
+The main assumptions for a Normal likelihood ratio test for a change in mean are:
+
+* Independent data points;
+* Normal distributed points pre and post change;
+* Constant variance across the data.
+
+How can we check these?
+
+In reality we can't check assumptions prior to analysis.  Let's return to the `m1` data with a single change in mean at 100 with Normal errors.
+```{r,out.height=450}
+ts.plot(m1)
+```
+
+Let's check the Normal assumption:
+```{r,out.height=450}
+hist(m1)
+```
+
+Severely bi-modal, but let's verify with normality tests:
+```{r}
+shapiro.test(m1)
+ks.test(m1,pnorm,mean=mean(m1),sd=sd(m1))
+```
+
+Good news, the tests say it isn't likely to be Normal either.  What about the autocorrelation, recall we assume independence.
+```{r,out.height=450}
+acf(m1)
+```
+
+This data definitely isn't independent (you may think it looks like a long memory process but that is for another talk).  Instead we have to check our assumptions after identifying the changes (and potential re-run a more appropriate analysis too!).
+
+## Segment check
+One method for checking assumptions post-analysis is to check each segment independently.  The following code can do this.  First we check the shapiro and kolmogorov-smirnov tests.
+```{r}
+cpt.seg=cbind(c(0,cpts(m1.amoc)),seg.len(m1.amoc))
+data=data.set(m1.amoc)
+shapiro.func=function(x){
+  out=shapiro.test(data[(x[1]+1):(x[1]+x[2])])
+  return(c(out$statistic,p=out$p.value))}
+apply(cpt.seg,1,shapiro.func)
+```
+```{r}
+ks.func=function(x){
+  tmp=data[(x[1]+1):(x[1]+x[2])]
+  out=ks.test(tmp,pnorm,mean=mean(tmp),sd=sd(tmp))
+  return(c(out$statistic,p=out$p.value))}
+apply(cpt.seg,1,ks.func)
+```
+
+Now let's look at qqplots.
+```{r,out.width=400}
+qqnorm.func=function(x){
+  qqnorm(data[(x[1]+1):(x[1]+x[2])])
+  qqline(data[(x[1]+1):(x[1]+x[2])])}
+out=apply(cpt.seg,1,qqnorm.func)
+```
+
+And the acf for looking at independence.
+```{r,out.width=400}
+acf.func=function(x){
+  acf(data[(x[1]+1):(x[1]+x[2])])}
+out=apply(cpt.seg,1,acf.func)
+```
+
+Not too bad here, although we did simulate from a Normal distribution so it should be good.
+
+## Residual check
+An alternative to checking each segment in turn is to check the residuals of the model fit.
+```{r}
+means=param.est(m1.amoc)$mean
+m1.resid=m1-rep(means,seg.len(m1.amoc))
+shapiro.test(m1.resid)
+```
+
+```{r}
+ks.test(m1.resid,pnorm,mean=mean(m1.resid),sd=sd(m1.resid))
+```
+
+```{r,out.height=450}
+qqnorm(m1.resid)
+qqline(m1.resid)
+acf(m1.resid)
+```
+Arguably testing the residuals might give you more power as you have the entire dataset rather than potentially very small segments.
+
+## Task
+Check the assumptions you have made on the simulated, Nile, FTSE100 and HeartRate data using either the segment or residual check. 
+
+What effect might any invalid assumptions have on the inference?
+
+
+
+# Consolidating Task
+Download the ratings for the following TV shows from the [IMDB](http://www.imdb.com/) and analyze the series using some of the techniques you have learnt from today.  For each series, do you identify any changes?  Are the assumptions you are making valid? What effect might any invalid assumptions have on the inference?
+
+* [Doctor Who](http://www.imdb.com/title/tt0436992/epdate)
+* [Grey's Anaytomy](http://www.imdb.com/title/tt0413573/epdate)
+* [Mistresses](http://www.imdb.com/title/tt2295809/epdate)
+* [The Simpsons](http://www.imdb.com/title/tt0096697/epdate)
+* [Top Gear](http://www.imdb.com/title/tt1628033/epdate)
+
+(Understandably IMBD does not allow screen scraping nor downloads of information for redistribution so you will have to copy and paste the table yourself in order to get the ratings data into R.)
+
+### Bonus
+Just from looking at the data, can you predict which shows have been cancelled?
+
+# References
+[JSS:](https://www.jstatsoft.org/article/view/v058i03) Killick, Eckley (2014)  
+[PELT:](http://www.tandfonline.com/doi/abs/10.1080/01621459.2012.737745) Killick, Fearnhead, Eckley (2012)  
+[CROPS:](http://dx.doi.org/10.1080/10618600.2015.1116445) Kaynes, Eckley, Fearnhead (2015)  
+[cpt.np:](http://link.springer.com/article/10.1007/s11222-016-9687-5) Haynes, Fearnhead, Eckley (2016)  
+[Lavielle:](http://dx.doi.org/10.1016/j.sigpro.2005.01.012) (2005)
+
+# Coming soon to a changepoint package near you
+
+* Robust changepoint detection (on github soon to be in changepint.np)
+* Join-pin regression
+* FPOP (faster than binary segmentation but exact, on github soon to be in changepoint)
+* Online PELT
+* Multivariate changepoints
+* Long memory or changepoint?
