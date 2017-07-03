@@ -97,8 +97,9 @@ someProfiles <- function(all.profiles){
   data.table(some)
 }
 neuroblastoma.dt <- data.table(neuroblastoma$profiles)
-neuroblastoma.dt[, logratio.norm := logratio/mad(logratio), by=list(
-  profile.id, chromosome)]
+## neuroblastoma.dt[, logratio.norm := logratio/mad(logratio), by=list(
+##   profile.id, chromosome)]
+neuroblastoma.dt[, logratio.norm := logratio]
 six.profiles <- someProfiles(neuroblastoma.dt)
 ```
 
