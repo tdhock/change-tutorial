@@ -2,7 +2,7 @@ This repository contains code for the useR2017 tutorial "Introduction
 to optimal changepoint detection algorithms" by Toby Dylan Hocking and
 Rebecca Killick.
 
-Rebecca: [[Unsupervised changepoint detection][http://members.cbio.mines-paristech.fr/~thocking/change-tutorial/RK-CptWorkshop.html]], 90 minutes. [[file:RK-CptWorkshop.Rmd][Source Rmd]].
+Rebecca: [[http://members.cbio.mines-paristech.fr/~thocking/change-tutorial/RK-CptWorkshop.html][Unsupervised changepoint detection]], 90 minutes. [[file:RK-CptWorkshop.Rmd][Source Rmd]].
 
 Toby: [[http://members.cbio.mines-paristech.fr/~thocking/change-tutorial/Supervised.html][Supervised changepoint detection]], 90 minutes. To follow along,
 open the two links below.
