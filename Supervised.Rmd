@@ -363,7 +363,7 @@ a set of labels.
   "breakpoint" label (no predicted changes inside is a false
   negative).
 * For each region that contains no changepoints, create a "normal"
-  label (one or more predicted changes inside is a false positive)..
+  label (one or more predicted changes inside is a false positive).
 * For each region that contains exactly one changepoint, create a
   "1change" label (no predicted changes inside is a false negative,
   and two or more is a false positive).
@@ -419,7 +419,7 @@ following computations:
   compute the number of incorrect labels for each labeled segmentation
   problem and each changepoint model. The goal of learning is to
   minimize the number of incorrectly predicted labels.
-* [Model selection](#model-selection) use
+* [Model selection](#model-selection). Use
   `penaltyLearning::modelSelection` to compute the exact path of
   models that will be selected for every possible non-negative penalty
   value.
@@ -1894,7 +1894,7 @@ with improved changepoint detection accuracy.
   all data sequences (even those without labels), then
   [plots the predicted changepoints along with the train errors](figure-neuroblastoma-predictions.png). Some
   overfitting/extrapolation errors are evident. For example some chrY
-  sequences have too many changes --- this could be fixed by add some
+  sequences have too many changes --- this could be fixed by adding some
   negative/normal labels on those sequences.
 
 **Conclusion:** in **labeled data sequences with a common signal/noise
