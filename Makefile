@@ -1,3 +1,5 @@
+Supervised-ex.html: Supervised-ex.Rmd
+	Rscript -e 'rmarkdown::render("Supervised-ex.Rmd")'
 Supervised.html: Supervised.Rmd
 	Rscript -e 'rmarkdown::render("Supervised.Rmd")'
 depmixS4.models.RData: depmixS4.models.R
