@@ -112,7 +112,7 @@ library(ggplot2)
 gg.unsupervised <- ggplot()+
   ggtitle("unsupervised changepoint detection = only noisy data sequences")+
   theme(
-    panel.margin=grid::unit(0, "lines"),
+    panel.spacing=grid::unit(0, "lines"),
     panel.border=element_rect(fill=NA, color="grey50")
   )+
   facet_grid(status.profile ~ chromosome, scales="free", space="free_x")+
@@ -545,7 +545,7 @@ the models.
   changepoint=chromStart)])
 zoom.gg.models <- zoom.gg.lab+
   theme(
-    panel.margin=grid::unit(0, "lines"),
+    panel.spacing=grid::unit(0, "lines"),
     panel.border=element_rect(fill=NA, color="grey50")
   )+
   facet_grid(n.segments ~ .)+
@@ -751,7 +751,7 @@ zoom.gg.errors <- ggplot()+
     size=1,
     data=zoom.errors.tall)+
   theme_bw()+
-  theme(panel.margin=grid::unit(0, "lines"))+
+  theme(panel.spacing=grid::unit(0, "lines"))+
   facet_grid(variable ~ ., scales="free")+
   scale_y_continuous("", breaks=0:max.segments)+
   xlab("log(penalty) = log(lambda)")
@@ -910,7 +910,7 @@ six.targets.tall <- data.table::melt(
   value.name="log.lambda")[is.finite(log.lambda)]
 six.gg.errors <- ggplot()+
   theme_bw()+
-  theme(panel.margin=grid::unit(0, "lines"))+
+  theme(panel.spacing=grid::unit(0, "lines"))+
   facet_grid(profile.id ~ chromosome, labeller=function(df){
     if("chromosome" %in% names(df))
       df$chromosome <- paste0("chr", df$chromosome)
@@ -1070,6 +1070,7 @@ six.features.targets[{
     cbind(min.log.lambda, max.log.lambda), pred.log.lambda)
 }]
 model.colors <- c(
+  constant="black",
   "BIC/SIC"="#1B9E77",#green
   survreg="#D95F02",#orange
   IntervalRegressionCV="#7570B3")#dark purple
@@ -1727,7 +1728,7 @@ using the code below. (to re-compute them on your computer, run
 ```{r load-Segmentor-models}
 if(!file.exists("Segmentor.models.RData")){
   download.file(
-    "http://members.cbio.ensmp.fr/~thocking/change-tutorial/Segmentor.models.RData",
+    "https://rcdata.nau.edu/genomic-ml/Segmentor.models.RData",
     "Segmentor.models.RData")
 }
 load("Segmentor.models.RData")
@@ -1802,7 +1803,14 @@ for(test.fold in 1:n.folds){
   test.target.dt <- nb.target.dt[fold==test.fold]
   test.id.vec <- test.target.dt[, paste(profile.id, chromosome)]
   test.feature.vec <- labeled.feature.mat[test.id.vec, "n.loglog"]
+  ## baseline constant prediction
+  const.pen.vec <- seq(-4, 4, by=0.1)
+  const.acc.vec <- sapply(const.pen.vec, function(pred.penalty){
+    sum(train.target.mat[,1] < pred.penalty & pred.penalty < train.target.mat[,2])
+  })
+  best.constant <- const.pen.vec[which.max(const.acc.vec)]
   pred.list <- list(
+    constant=rep(best.constant, length(test.feature.vec)),
     "BIC/SIC"=test.feature.vec,
     survreg=predict(fit.survreg, data.table(feature=test.feature.vec)),
     IntervalRegressionCV=predict(fit, labeled.feature.mat[test.id.vec,]))
@@ -1861,7 +1869,7 @@ levs <- cv.means[variable=="auc"][order(mean), model]
 cv.auc.tall[, model.fac := factor(model, levs)]
 ggplot()+
   theme_bw()+
-  theme(panel.margin=grid::unit(0, "lines"))+
+  theme(panel.spacing=grid::unit(0, "lines"))+
   facet_grid(. ~ variable, scales="free")+
   scale_color_manual(values=model.colors)+
   guides(color="none")+
@@ -1873,17 +1881,18 @@ ggplot()+
 ```
 
 It is clear from the plot above that survreg is significantly more
-accurate than BIC/SIC, and IntervalRegressionCV is slightly more
+accurate than the BIC/SIC and constant penalties, 
+and IntervalRegressionCV is slightly more
 accurate than survreg. 
 
-**Remark 1:** the accuracy rates above (BIC/SIC predicts 92% correct
-labels whereas survreg and IntervalRegressionCV predict 97-98% correct
-labels) are specific to the neuroblastoma data set. However, in
-general you can expect that unsupervised penalty functions like
-BIC/SIC will be less accurate than supervised methods such as
-IntervalRegressionCV. This is the main motivation of supervised
-changepoint analysis: we can use labels to learn a penalty function
-with improved changepoint detection accuracy.
+**Remark 1:** the accuracy rates above (BIC/SIC and constant penalties
+predict 92% correct labels whereas survreg and IntervalRegressionCV
+predict 97-98% correct labels) are specific to the neuroblastoma data
+set. However, in general you can expect that unsupervised penalty
+functions like BIC/SIC will be less accurate than supervised methods
+such as IntervalRegressionCV. This is the main motivation of
+supervised changepoint analysis: we can use labels to learn a penalty
+function with improved changepoint detection accuracy.
 
 **Remark 2:** To learn the most accurate model, it is best to use all
   training data (instead of holding out some of the labels as a test
