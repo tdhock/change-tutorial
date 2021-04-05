@@ -73,17 +73,16 @@ works_with_R <- function(Rvers,...){
   }
 }
 works_with_R(
-  c("3.3.2", "3.3.3", "3.4.0"),
+  "4.0.2",
   neuroblastoma="1.0",
-  future=c("1.4.0", "1.5.0"),
+  future="1.18.0",
   Segmentor3IsBack="2.0",
-  changepoint=c("2.2", "2.2.2"),
-  directlabels="2017.3.31",
-  data.table=c("1.10.4", "1.10.5"),
-  survival=c("2.41.2", "2.41.3"),
-  ggplot2=c("2.1.0", "2.2.1"),
-  geometry=c("0.3.6", "0.4.0"),#for ROChange
-  penaltyLearning="2017.6.14"
-  ##"tdhock/penaltyLearning@656ee039abe61a7c1ed707fa537ee1174e581a0e"
+  changepoint="2.3.1",
+  directlabels="2021.1.13",
+  data.table="1.13.1",
+  survival="3.1.12",
+  ggplot2="3.3.2",
+  geometry="0.4.5",
+  penaltyLearning="2021.1.19"
   )
 future::plan(multiprocess)
