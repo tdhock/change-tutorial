@@ -4,7 +4,7 @@ Rebecca Killick.
 
 Rebecca: [[https://tdhock.github.io/change-tutorial/RK-CptWorkshop.html][Unsupervised changepoint detection]] 90 minutes [[https://channel9.msdn.com/events/useR-international-R-User-conferences/useR-International-R-User-2017-Conference/Introduction-to-optimal-changepoint-detection-algorithms?term%3Dhocking][video]]. [[file:RK-CptWorkshop.Rmd][Source Rmd]].
 
-Toby: [[https://tdhock.github.io/change-tutorial/Supervised.html][Supervised changepoint detection]], 90 minutes [[https://channel9.msdn.com/events/useR-international-R-User-conferences/useR-International-R-User-2017-Conference/Introduction-to-optimal-changepoint-detection-algorithms-II?term%3Dhocking][video]]. [[file:Supervised.Rmd][Source
+Toby: [[https://tdhock.github.io/change-tutorial/Supervised.html][Supervised changepoint detection]] [[https://rcdata.nau.edu/genomic-ml/change-tutorial/Supervised.html][NAU copy]], 90 minutes [[https://channel9.msdn.com/events/useR-international-R-User-conferences/useR-International-R-User-2017-Conference/Introduction-to-optimal-changepoint-detection-algorithms-II?term%3Dhocking][video]]. [[file:Supervised.Rmd][Source
 Rmd]]. 
 - Do the exercises during class on this Rcloud notebook
   https://rcloud.social/edit.html?notebook=3e66297efb401bc0c6333ad517804f85
@@ -31,7 +31,7 @@ Compare with BIC from PELT/fpop [[file:pelt.fpop.R]]
 
 ** 27 Apr 2017
 
-[[http://members.cbio.mines-paristech.fr/~thocking/change-tutorial/Supervised.html][Compiled Rmd HTML Supervised changepoint tutorial]], first draft, source: [[file:Supervised.Rmd]].
+[[https://rcdata.nau.edu/genomic-ml/change-tutorial/Supervised.html][Compiled Rmd HTML Supervised changepoint tutorial]], first draft, source: [[file:Supervised.Rmd]].
 
 ** 28 Feb 2017
 
