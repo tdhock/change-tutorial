@@ -161,9 +161,10 @@ ggplot()+
     shape=21)+
   coord_equal(xlim=c(0, 0.3), ylim=c(0.4, 1))
 
+roc[, mid.thresh := (min.thresh+max.thresh)/2]
 rate.grid.list <- list(
   TPR=seq(0.4, 0.95, by=0.05),
-  FPR=c(0.015, 0.02,0.03,0.04,0.06,0.08,0.1))
+  FPR=c(0.015, 0.02,0.03,0.04,0.061,0.08,0.1))
 roc.diff.dt.list <- list()
 roc.grid.dt.list <- list()
 for(rate in names(rate.grid.list)){
@@ -173,9 +174,7 @@ for(rate in names(rate.grid.list)){
   grid.roc <- roc[
   , .SD[grid.dt, roll=Inf, mult="first", on="grid"]
   , by=model.name
-  ][#max FP for given TP.
-  , mid.thresh := (min.thresh+max.thresh)/2
-  ]
+  ]#max FP for given TP.
   rate.wide <- dcast(
     grid.roc,
     grid ~ model.name,
@@ -185,28 +184,51 @@ for(rate in names(rate.grid.list)){
 }
 roc.grid.dt <- rbindlist(roc.grid.dt.list)
 roc.diff.dt <- rbindlist(roc.diff.dt.list)[, `:=`(
-  diff=ifelse(rate=="FPR", tp_BIC-tp_AIC, fp_AIC-fp_BIC),
+  tp_diff=tp_BIC-tp_AIC,
+  fp_diff=fp_AIC-fp_BIC
+)][, `:=`(
+  diff=ifelse(rate=="FPR", tp_diff, fp_diff),
   vjust=ifelse(rate=="FPR", 0, 1),
   hjust=ifelse(rate=="FPR", 1, 0)
 )]
-err.dt <- data.table(errors$label.errors, key=c("min.log.lambda","max.log.lambda")) #log lambda
-grid.labels <- roc.grid.dt[, {
-  thresh.dt <- data.table(model.name, mid.thresh, key="model.name")
-  this.pred <- thresh.dt[both.pred, .(
+err.dt <- data.table(
+  errors$label.errors,
+  key=c("min.log.lambda","max.log.lambda")
+)[, tp := possible.fn-fn]
+
+adj.pred <- roc.grid.dt[, {
+  data.table(
+    model.name, mid.thresh, key="model.name"
+  )[both.pred, .(
     model.name, profile.id, chromosome,
     adj.log.lambda=pred.log.lambda+mid.thresh
-  )]
-  err.dt[this.pred, on=.(
-    profile.id, chromosome,
-    max.log.lambda>adj.log.lambda,
-    min.log.lambda<adj.log.lambda
-  )][
-  , same := all(status==status[1]), by=.(profile.id,chromosome)
-  ]
-}, by=.(rate, grid)]
+  ), on="model.name"]
+}, by=.(rate,grid)]
+grid.labels <- err.dt[adj.pred, on=.(
+  profile.id, chromosome,
+  max.log.lambda>adj.log.lambda,
+  min.log.lambda<adj.log.lambda
+)][
+, `:=`(same=all(status==status[1]), sameN=.N), by=.(rate,grid,profile.id,chromosome)
+]
+grid.labels[, .(# to check, ok.
+  fp=sum(fp),
+  tp=sum(tp)
+), by=.(rate,grid,model.name)]
 not.same <- grid.labels[same==FALSE]
-not.same[, .(diffs=.N), by=.(rate,grid)]
-not.same[rate=="FPR" & grid==0.1 & profile.id==11 & chromosome==3]
+not.same.wide <- dcast(
+  not.same,
+  profile.id+chromosome+rate+grid ~ model.name,
+  value.var=c("tp","fp")
+)[, `:=`(
+  tp_diff = tp_BIC-tp_AIC,
+  fp_diff = fp_AIC-fp_BIC
+)]
+not.same.wide[, .(
+  tp_diff=sum(tp_diff),
+  fp_diff=sum(fp_diff)
+), keyby=.(rate,grid)]
+not.same[, .(count=.N), by=.(rate,grid,model.name,status)]
 ggplot()+
   theme_bw()+
   geom_text(aes(
@@ -232,7 +254,6 @@ ggplot()+
     shape=21)+
   coord_equal(xlim=c(0, 0.3), ylim=c(0.4, 1))
 
-roc[, mid.thresh := (min.thresh+max.thresh)/2]
 pred.dot[, mid.thresh := (min.thresh+max.thresh)/2]
 roc[, threshold := "other"]
 ## We would like to sample some thresholds evenly in the ROC space, so
