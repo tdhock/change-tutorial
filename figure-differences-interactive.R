@@ -1,24 +1,73 @@
-source("packages.R")
-source("animint.R")
-
+library(animint2)
+library(data.table)
 data(neuroblastoma, package="neuroblastoma")
-load("Segmentor.models.RData")
-selection <-
-  Segmentor.models$loss[, modelSelection(
-    .SD, complexity="n.segments"
-  ), by=.(profile.id, chromosome)]
-changes <- Segmentor.models$segs[1 < start, ]
-errors <- labelError(
+
+nb.dts <- lapply(neuroblastoma, data.table, key=c("profile.id", "chromosome"))
+
+if(file.exists("Segmentor.models.RData")){
+  load("Segmentor.models.RData")
+}else{
+  segs.list <- list()
+  loss.list <- list()
+  for(problem.i in seq_along(labeled.problem.names)){
+    problem.name <- labeled.problem.names[[problem.i]]
+    meta <- meta.df[problem.i,]
+    cat(sprintf("%4d / %4d problems %s\n", problem.i, length(labeled.problem.names), problem.name))
+    pro <- problem.list[[problem.name]]
+    fit <- Segmentor3IsBack::Segmentor(pro$logratio, model=2, Kmax=max.segments)
+    rss.vec <- rep(NA, max.segments)
+    for(n.segments in 1:max.segments){
+      end <- fit@breaks[n.segments, 1:n.segments]
+      data.before.change <- end[-n.segments]
+      data.after.change <- data.before.change+1
+      pos.before.change <- as.integer(
+      (pro$position[data.before.change]+pro$position[data.after.change])/2)
+      start <- c(1, data.after.change)
+      chromStart <- c(pro$position[1], pos.before.change)
+      chromEnd <- c(pos.before.change, max(pro$position))
+      seg.mean.vec <- fit@parameters[n.segments, 1:n.segments]
+      data.mean.vec <- rep(seg.mean.vec, end-start+1)
+      residual.vec <- pro$logratio - data.mean.vec
+      rss.vec[n.segments] <- sum(residual.vec * residual.vec)
+      segs.list[[paste(problem.name, n.segments)]] <- data.table(
+        meta,
+        n.segments,
+        start,
+        end,
+        chromStart,
+        chromEnd,
+        mean=seg.mean.vec)
+    }
+    if(FALSE){
+      ## The likelihood computed by the Segmentor function is just an
+      ## affine transformation of the sum of squared residuals.
+      plot(rss.vec, fit@likelihood)
+    }
+    loss.list[[paste(problem.name, n.segments)]] <- data.table(
+      meta,
+      n.segments=1:max.segments,
+      loss=rss.vec)
+  }
+  Segmentor.models <- list(
+    segs=do.call(rbind, segs.list),
+    loss=do.call(rbind, loss.list))
+  save(Segmentor.models, file="Segmentor.models.RData")
+}
+
+selection <- Segmentor.models$loss[, penaltyLearning::modelSelection(
+  .SD, complexity="n.segments"
+), by=.(profile.id, chromosome)]
+changes <- Segmentor.models$segs[1 < start]
+errors <- penaltyLearning::labelError(
   selection, neuroblastoma$annotations, changes,
   change.var="chromStart",
   label.vars=c("min", "max"),
   model.vars="n.segments",
   problem.vars=c("profile.id", "chromosome"))
-target.dt <- targetIntervals(
+target.dt <- penaltyLearning::targetIntervals(
   errors$model.errors, c("profile.id", "chromosome"))
-some.profiles <- data.table(
-  neuroblastoma$profiles)[target.dt, on=.(profile.id, chromosome)]
-feature.dt <-  some.profiles[, list(
+labeled.profiles <- nb.dts$profiles[target.dt]
+feature.dt <-  labeled.profiles[, list(
   log2.n=log(log(.N)),
   log.mad=log(median(abs(diff(logratio))))
 ), by=.(profile.id, chromosome)]
@@ -44,7 +93,7 @@ train.dt <- data.table(
 BIC.df <- data.frame(slope=1, intercept=0, model.name="BIC")
 train.dt[, pred.log.lambda := feature ] #for the BIC
 train.dt$model.name <- "BIC"
-train.dt[, residual := targetIntervalResidual(
+train.dt[, residual := penaltyLearning::targetIntervalResidual(
   cbind(min.log.lambda, max.log.lambda), pred.log.lambda)]
 
 possible <- train.dt[, list(
@@ -53,52 +102,135 @@ possible <- train.dt[, list(
   total=.N
   )]
 
-fit <- survreg(
-  Surv(min.log.lambda, max.log.lambda, type="interval2") ~ feature,
+fit <- survival::survreg(
+  survival::Surv(min.log.lambda, max.log.lambda, type="interval2") ~ feature,
   train.dt, dist="gaussian")
-pred.dt <- data.table(train.dt)
-pred.dt[, pred.log.lambda := predict(fit)]
-pred.dt[, residual := targetIntervalResidual(
-  cbind(min.log.lambda, max.log.lambda), pred.log.lambda)]
-pred.dt$model.name <- "learned"
+pred.dt <- data.table(train.dt)[
+, pred.log.lambda := predict(fit)
+][
+, residual := penaltyLearning::targetIntervalResidual(
+  cbind(min.log.lambda, max.log.lambda), pred.log.lambda)
+][
+, model.name := "learned"
+]
 
 model.list <- list(
-  BIC=train.dt,
-  learned=pred.dt)
+  ##learned=pred.dt,
+  AIC=data.table(target.dt, pred.log.lambda=log(2)),
+  BIC=train.dt)
 roc.list <- list()
 auc.list <- list()
+both.pred.list <- list()
 pred.dot.list <- list()
 auc.polygon.list <- list()
 for(model.name in names(model.list)){
   model.dt <- model.list[[model.name]]
-  feature.result <- ROChange(errors$model.errors, model.dt, c("profile.id", "chromosome"))
+  both.pred.list[[model.name]] <- data.table(model.name, model.dt[, .(
+    profile.id, chromosome, pred.log.lambda)])
+  feature.result <- penaltyLearning::ROChange(
+    errors$model.errors, model.dt, c("profile.id", "chromosome"))
   pred.dot.list[[model.name]] <- data.table(
     model.name, feature.result$thresholds[threshold=="predicted",])
   roc.list[[model.name]] <- data.table(model.name, feature.result$roc)
   auc.list[[model.name]] <- data.table(model.name, auc=feature.result$auc)
   auc.polygon.list[[model.name]] <- data.table(model.name, feature.result$auc.polygon)
 }
+both.pred <- rbindlist(both.pred.list)
 roc <- do.call(rbind, roc.list)
 auc <- do.call(rbind, auc.list)
 pred.dot <- do.call(rbind, pred.dot.list)
 auc.polygon <- do.call(rbind, auc.polygon.list)
 
 ## Zoomed ROC curves.
-auc$TPR <- c(0.85, 0.9)
-auc$FPR <- 1
+auc$TPR <- c(0.85, 1)
+auc$FPR <- c(0.2, 0.05)
 ggplot()+
   theme_bw()+
-  geom_text(aes(FPR, TPR, color=model.name, label=sprintf("AUC = %.4f", auc)),
-            vjust=0,
-            data=auc)+
-  geom_path(aes(FPR, TPR, color=model.name, group=model.name),
-            data=roc)+
+  geom_text(aes(
+    FPR, TPR, color=model.name, label=sprintf("AUC = %.4f", auc)),
+    vjust=0,
+    data=auc)+
+  geom_path(aes(
+    FPR, TPR, color=model.name, group=model.name),
+    data=roc)+
   scale_fill_manual(values=c(default="grey", min.error="black"))+
-  geom_point(aes(FPR, TPR, color=model.name, fill=threshold),
-             data=pred.dot,
-             size=3,
-             shape=21)+
-  coord_equal(xlim=c(0, 0.25), ylim=c(0.75, 1))
+  geom_point(aes(
+    FPR, TPR, color=model.name, fill=threshold),
+    data=pred.dot,
+    size=3,
+    shape=21)+
+  coord_equal(xlim=c(0, 0.3), ylim=c(0.4, 1))
+
+rate.grid.list <- list(
+  TPR=seq(0.4, 0.95, by=0.05),
+  FPR=c(0.015, 0.02,0.03,0.04,0.06,0.08,0.1))
+roc.diff.dt.list <- list()
+roc.grid.dt.list <- list()
+for(rate in names(rate.grid.list)){
+  grid.vec <- rate.grid.list[[rate]]
+  grid.dt <- data.table(grid=sort(c(pred.dot[[rate]], grid.vec)))
+  set(roc, j="grid", value=roc[[rate]])
+  grid.roc <- roc[
+  , .SD[grid.dt, roll=Inf, mult="first", on="grid"]
+  , by=model.name
+  ][#max FP for given TP.
+  , mid.thresh := (min.thresh+max.thresh)/2
+  ]
+  rate.wide <- dcast(
+    grid.roc,
+    grid ~ model.name,
+    value.var=c("FPR", "TPR","fp","tp","mid.thresh"))
+  roc.grid.dt.list[[rate]] <- data.table(rate, grid.roc)
+  roc.diff.dt.list[[rate]] <- data.table(rate, rate.wide)
+}
+roc.grid.dt <- rbindlist(roc.grid.dt.list)
+roc.diff.dt <- rbindlist(roc.diff.dt.list)[, `:=`(
+  diff=ifelse(rate=="FPR", tp_BIC-tp_AIC, fp_AIC-fp_BIC),
+  vjust=ifelse(rate=="FPR", 0, 1),
+  hjust=ifelse(rate=="FPR", 1, 0)
+)]
+err.dt <- data.table(errors$label.errors, key=c("min.log.lambda","max.log.lambda")) #log lambda
+grid.labels <- roc.grid.dt[, {
+  thresh.dt <- data.table(model.name, mid.thresh, key="model.name")
+  this.pred <- thresh.dt[both.pred, .(
+    model.name, profile.id, chromosome,
+    adj.log.lambda=pred.log.lambda+mid.thresh
+  )]
+  err.dt[this.pred, on=.(
+    profile.id, chromosome,
+    max.log.lambda>adj.log.lambda,
+    min.log.lambda<adj.log.lambda
+  )][
+  , same := all(status==status[1]), by=.(profile.id,chromosome)
+  ]
+}, by=.(rate, grid)]
+not.same <- grid.labels[same==FALSE]
+not.same[, .(diffs=.N), by=.(rate,grid)]
+not.same[rate=="FPR" & grid==0.1 & profile.id==11 & chromosome==3]
+ggplot()+
+  theme_bw()+
+  geom_text(aes(
+    FPR, TPR, color=model.name, label=sprintf("AUC = %.4f", auc)),
+    vjust=0,
+    data=auc)+
+  geom_segment(aes(
+    FPR_AIC, TPR_AIC,
+    xend=FPR_BIC, yend=TPR_BIC),
+    color="grey50",
+    data=roc.diff.dt)+
+  geom_text(aes(
+    FPR_AIC, TPR_BIC, label=diff, hjust=hjust, vjust=vjust),
+    data=roc.diff.dt)+
+  geom_path(aes(
+    FPR, TPR, color=model.name, group=model.name),
+    data=roc)+
+  scale_fill_manual(values=c(default="grey", min.error="black"))+
+  geom_point(aes(
+    FPR, TPR, color=model.name, fill=threshold),
+    data=pred.dot,
+    size=3,
+    shape=21)+
+  coord_equal(xlim=c(0, 0.3), ylim=c(0.4, 1))
 
 roc[, mid.thresh := (min.thresh+max.thresh)/2]
 pred.dot[, mid.thresh := (min.thresh+max.thresh)/2]
@@ -139,17 +271,20 @@ some.thresh[, intercept := {
 }]
 ggplot()+
   theme_bw()+
-  geom_text(aes(FPR, TPR, label=sprintf("AUC = %.4f", auc)),
-            vjust=0,
-            data=auc)+
-  geom_path(aes(FPR, TPR, 
-                color=dist.from.zero, group=model.name),
-            data=roc)+
+  geom_text(aes(
+    FPR, TPR, label=sprintf("AUC = %.4f", auc)),
+    vjust=0,
+    data=auc)+
+  geom_path(aes(
+    FPR, TPR, 
+    color=dist.from.zero, group=model.name),
+    data=roc)+
   scale_fill_manual(values=c(default="grey", min.error="black"))+
-  geom_point(aes(FPR, TPR, fill=threshold),
-             data=pred.dot,
-             size=3,
-             shape=21)+
+  geom_point(aes(
+    FPR, TPR, fill=threshold),
+    data=pred.dot,
+    size=3,
+    shape=21)+
   scale_color_gradient(low="black", high="red")
 
 both.pred <- rbind(train.dt, pred.dt)
@@ -281,17 +416,18 @@ viz <- list(
     scale_color_manual(values=c(BIC="red", learned="deepskyblue"))+
     scale_x_continuous("feature = log(log(n = number of data points to segment))")+
     scale_y_continuous("<-- more changes     log(penalty)     less changes -->"),
-  source="https://github.com/tdhock/change-tutorial/blob/master/figure-regression-interactive.R",
+  source="https://github.com/tdhock/change-tutorial/blob/master/figure-differences-interactive.R",
   first=list())
 pred.thresh.only <- some.thresh[threshold=="predicted"]
 for(row.i in 1:nrow(pred.thresh.only)){
   r <- pred.thresh.only[row.i, ]
   viz$first[[paste0(r$model.name, ".thresh")]] <- r$mid.thresh
 }
-animint2dir(viz, "figure-regression-interactive")
+animint2dir(viz, "figure-differences-interactive")
 if(FALSE){
-  animint2pages(viz, "2023-08-interval-regression-BIC-vs-learned")
+  animint2pages(viz, "2023-11-interval-regression-differences")
 }
 
+## TODO binseg vs DP.
 
-
+## TODO AIC, CV.

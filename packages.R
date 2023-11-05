@@ -19,8 +19,6 @@ install.if.old <- function(pkg, vers){
   }
 }
 unloadNamespace("penaltyLearning")
-install.if.old("survival", "2.41.2")
-install.if.old("data.table", "1.9.8")
 ### Write down what package versions work with your R code, and
 ### attempt to download and load those packages. The first argument is
 ### the version of R that you used, e.g. "3.0.2" and then the rest of
@@ -81,8 +79,7 @@ works_with_R(
   directlabels="2021.1.13",
   data.table="1.13.1",
   survival="3.1.12",
-  ggplot2="3.3.2",
   geometry="0.4.5",
   penaltyLearning="2021.1.19"
   )
-future::plan(multiprocess)
+future::plan(multicore)
