@@ -161,7 +161,11 @@ ggplot()+
     shape=21)+
   coord_equal(xlim=c(0, 0.3), ylim=c(0.4, 1))
 
-roc[, mid.thresh := (min.thresh+max.thresh)/2]
+add_mid <- function(DT){
+  DT[, mid.thresh := (min.thresh+max.thresh)/2]
+}
+add_mid(roc)
+add_mid(pred.dot)
 rate.grid.list <- list(
   TPR=seq(0.4, 0.95, by=0.05),
   FPR=c(0.015, 0.02,0.03,0.04,0.061,0.08,0.1))
@@ -195,7 +199,6 @@ err.dt <- data.table(
   errors$label.errors,
   key=c("min.log.lambda","max.log.lambda")
 )[, tp := possible.fn-fn]
-
 adj.pred <- roc.grid.dt[, {
   data.table(
     model.name, mid.thresh, key="model.name"
@@ -204,7 +207,10 @@ adj.pred <- roc.grid.dt[, {
     adj.log.lambda=pred.log.lambda+mid.thresh
   ), on="model.name"]
 }, by=.(rate,grid)]
-grid.labels <- err.dt[adj.pred, on=.(
+grid.labels <- err.dt[adj.pred, .(
+  profile.id, chromosome, n.segments, rate, grid, model.name, tp, fp, status,
+  adj.log.lambda=i.adj.log.lambda, min, max
+), on=.(
   profile.id, chromosome,
   max.log.lambda>adj.log.lambda,
   min.log.lambda<adj.log.lambda
@@ -254,75 +260,98 @@ ggplot()+
     shape=21)+
   coord_equal(xlim=c(0, 0.3), ylim=c(0.4, 1))
 
-pred.dot[, mid.thresh := (min.thresh+max.thresh)/2]
-roc[, threshold := "other"]
-## We would like to sample some thresholds evenly in the ROC space, so
-## here we compute dist.from.zero, which is the cumulative euclidean
-## distance from (0,0) in the ROC space.
-roc[, dist.from.zero := cumsum(sqrt({
-  diff(c(0, FPR))^2 + diff(c(0, TPR))^2
-})), by=model.name]
-grid.thresh <- roc[is.finite(mid.thresh), {
-  .SD[as.integer(seq(1, .N, l=50)[c(1,5,10,15,20, 25, 30:50)]), ]
-}, by=model.name]
-grid.thresh <- roc[is.finite(mid.thresh), {
-  r <- range(dist.from.zero)
-  d.vec <- seq(r[1], r[2], l=50)
-  i.vec <- sapply(d.vec, function(d)which.min(abs(dist.from.zero-d)))
-  .SD[i.vec,]
-}, by=model.name]
-some.thresh <- unique(rbind(
-  grid.thresh[, names(pred.dot), with=FALSE],
-  pred.dot))
-setkey(some.thresh, model.name, mid.thresh)
-some.thresh[, prev.thresh := {
-  d <- diff(mid.thresh)/2
-  c(mid.thresh[1]-d[1], mid.thresh[-.N]+d)
-  }, by=model.name]
-some.thresh[, next.thresh := {
-  d <- diff(mid.thresh)/2
-  c(mid.thresh[-.N]+d, mid.thresh[.N]+d[.N-1])
-}, by=model.name]
-some.thresh[, stopifnot(
-  identical(prev.thresh[-1], next.thresh[-.N])
-  ), by=model.name]
-some.thresh[, slope := ifelse(model.name=="BIC", 1, coef(fit)[["feature"]])]
-some.thresh[, intercept := {
-  ifelse(model.name=="BIC", 0, coef(fit)[["(Intercept)"]])+mid.thresh
-}]
-ggplot()+
-  theme_bw()+
-  geom_text(aes(
-    FPR, TPR, label=sprintf("AUC = %.4f", auc)),
-    vjust=0,
-    data=auc)+
-  geom_path(aes(
-    FPR, TPR, 
-    color=dist.from.zero, group=model.name),
-    data=roc)+
-  scale_fill_manual(values=c(default="grey", min.error="black"))+
-  geom_point(aes(
-    FPR, TPR, fill=threshold),
-    data=pred.dot,
-    size=3,
-    shape=21)+
-  scale_color_gradient(low="black", high="red")
-
-both.pred <- rbind(train.dt, pred.dt)
-setkey(both.pred, model.name)
-setkey(some.thresh, model.name)
-some.thresh.pred <- both.pred[some.thresh, allow.cartesian=TRUE]
-some.thresh.pred[, pred.log.lambda := slope * feature + intercept]
-some.thresh.pred[, residual := targetIntervalResidual(
-  cbind(min.log.lambda, max.log.lambda), pred.log.lambda)]
-total.thresh.pred <- unique(some.thresh.pred)[, list(
+roc.grid.dt[
+, slope := ifelse(model.name=="BIC", 1, 0)
+][
+, intercept := ifelse(model.name=="BIC", 0, log(2))+mid.thresh]
+]
+grid.label.int <- grid.labels[
+  target.dt,
+  on=.(profile.id,chromosome)
+][
+  feature.dt,
+  on=.(profile.id,chromosome)
+][
+, residual := penaltyLearning::targetIntervalResidual(
+  cbind(min.log.lambda, max.log.lambda), adj.log.lambda
+)][
+, limit := ifelse(is.finite(min.log.lambda), "min", "max")
+]
+total.thresh.pred <- grid.label.int[, list(
   total.residual=sum(residual),
   intervals=.N
-), by=.(model.name, sign.residual=sign(residual), mid.thresh)]
-total.thresh.pred[, top := ifelse(model.name=="BIC", 6.5, -4)]
-total.thresh.pred[, left := ifelse(model.name=="BIC", 1.45, 1.8)]
-total.thresh.pred[, log.penalty := top-(1-sign.residual)*0.7]
-residual.thresh.pred <- some.thresh.pred[residual!=0,]
+), by=.(model.name, sign.residual=sign(residual), rate, grid)
+][
+, top := ifelse(model.name=="BIC", 6.5, -4)
+][
+, left := ifelse(model.name=="BIC", 1.45, 1.8)
+][
+, log.penalty := top-(1-sign.residual)*0.7
+]
+total.thresh.pred[, .(
+  intervals=sum(intervals)
+), by=.(model.name, rate, grid)]
+train.long <- nc::capture_melt_single(
+  train.dt,
+  limit="min|max",
+  "[.]log[.]lambda",
+  value.name="log.penalty"
+)[is.finite(log.penalty)]
+select_rate <- function(DT){
+  if("rate" %in% names(DT)){
+    DT[, Rate := sprintf("%s=%.3f", rate, grid)]
+  }
+  if("profile.id" %in% names(DT)){
+    DT[, pid.chr := paste0(profile.id, ".", chromosome)]
+  }
+}
+select_rate(grid.label.int)
+select_rate(total.thresh.pred)
+select_rate(roc.grid.dt)
+select_rate(train.long)
+animint(
+  out.dir="figure-differences-interactive",
+  regression=ggplot()+
+    theme_bw()+
+    theme_animint(width=800)+
+    geom_text(aes(
+      left, log.penalty, 
+      color=model.name,
+      key=paste(model.name, sign.residual),
+      label=ifelse(sign.residual==0, sprintf(
+        "%d intervals correctly predicted", intervals), sprintf(
+          "total too %s = %.1f (%d/%d intervals)",
+          ifelse(sign.residual==1, "high", "low"),
+          total.residual, intervals,
+          possible[, ifelse(sign.residual==1, positive, negative)]))),
+      data=total.thresh.pred,
+      showSelected="Rate",
+      hjust=0)+
+    geom_point(aes(
+      feature, log.penalty, fill=limit),
+      data=train.long,
+      shape=21)+
+    geom_abline(aes(
+      slope=slope,
+      intercept=intercept,
+      color=model.name),
+      showSelected="Rate",
+      data=roc.grid.dt)+
+    geom_segment(aes(
+      log2.n, adj.log.lambda,
+      color=model.name,
+      key=pid.chr,
+      xend=log2.n,
+      yend=adj.log.lambda-residual),
+      size=1,
+      showSelected=c("Rate","limit"),
+      data=grid.label.int)+
+    scale_fill_manual(values=c(min="black", max="white"))+
+    scale_color_manual(values=c(BIC="red", AIC="deepskyblue"))+
+    scale_x_continuous("feature = log(log(n = number of data points to segment))")+
+    scale_y_continuous("<-- more changes     log(penalty)     less changes -->"),
+  duration=list(Rate=1000)
+)
 
 add_selector <- function(DT){
   DT[, selector := paste0(model.name, ".thresh")]
