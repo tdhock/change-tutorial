@@ -142,12 +142,16 @@ pred.dot <- do.call(rbind, pred.dot.list)
 auc.polygon <- do.call(rbind, auc.polygon.list)
 
 ## Zoomed ROC curves.
-auc$TPR <- c(0.85, 1)
-auc$FPR <- c(0.2, 0.05)
+auc$TPR <- c(0.84, 1.02)
+auc$FPR <- 0.1
+auc$hjust <- 1
 ggplot()+
   theme_bw()+
   geom_text(aes(
-    FPR, TPR, color=model.name, label=sprintf("AUC = %.4f", auc)),
+    FPR, TPR,
+    color=model.name,
+    hjust=hjust,
+    label=sprintf("AUC = %.4f", auc)),
     vjust=0,
     data=auc)+
   geom_path(aes(
@@ -160,7 +164,6 @@ ggplot()+
     size=3,
     shape=21)+
   coord_equal(xlim=c(0, 0.3), ylim=c(0.4, 1))
-
 add_mid <- function(DT){
   DT[, mid.thresh := (min.thresh+max.thresh)/2]
 }
@@ -235,16 +238,18 @@ not.same.wide[, .(
   fp_diff=sum(fp_diff)
 ), keyby=.(rate,grid)]
 not.same[, .(count=.N), by=.(rate,grid,model.name,status)]
+
 ggplot()+
   theme_bw()+
   geom_text(aes(
-    FPR, TPR, color=model.name, label=sprintf("AUC = %.4f", auc)),
+    FPR, TPR,
+    color=model.name,
+    label=sprintf("AUC = %.4f", auc)),
     vjust=0,
     data=auc)+
   geom_segment(aes(
     FPR_AIC, TPR_AIC,
     xend=FPR_BIC, yend=TPR_BIC),
-    color="grey50",
     data=roc.diff.dt)+
   geom_text(aes(
     FPR_AIC, TPR_BIC, label=diff, hjust=hjust, vjust=vjust),
@@ -258,12 +263,12 @@ ggplot()+
     data=pred.dot,
     size=3,
     shape=21)+
-  coord_equal(xlim=c(0, 0.3), ylim=c(0.4, 1))
+  coord_equal(xlim=c(0, 0.1), ylim=c(0.4, 1))
 
 roc.grid.dt[
 , slope := ifelse(model.name=="BIC", 1, 0)
 ][
-, intercept := ifelse(model.name=="BIC", 0, log(2))+mid.thresh]
+, intercept := ifelse(model.name=="BIC", 0, log(2))+mid.thresh
 ]
 grid.label.int <- grid.labels[
   target.dt,
@@ -291,12 +296,15 @@ total.thresh.pred <- grid.label.int[, list(
 total.thresh.pred[, .(
   intervals=sum(intervals)
 ), by=.(model.name, rate, grid)]
-train.long <- nc::capture_melt_single(
-  train.dt,
-  limit="min|max",
-  "[.]log[.]lambda",
-  value.name="log.penalty"
-)[is.finite(log.penalty)]
+long_limits <- function(DT){
+  not.limit <- names(DT)[names(DT)!="limit"]
+  train.long <- nc::capture_melt_single(
+    DT[, not.limit, with=FALSE],
+    limit="min|max",
+    "[.]log[.]lambda",
+    value.name="log.penalty"
+  )[is.finite(log.penalty)]
+}
 select_rate <- function(DT){
   if("rate" %in% names(DT)){
     DT[, Rate := sprintf("%s=%.3f", rate, grid)]
@@ -305,179 +313,198 @@ select_rate <- function(DT){
     DT[, pid.chr := paste0(profile.id, ".", chromosome)]
   }
 }
+train.long <- long_limits(train.dt)
 select_rate(grid.label.int)
+grid.label.dots <- long_limits(grid.label.int[model.name=="BIC"])#arbitrary.
 select_rate(total.thresh.pred)
 select_rate(roc.grid.dt)
+select_rate(roc.diff.dt)
 select_rate(train.long)
-animint(
-  out.dir="figure-differences-interactive",
-  regression=ggplot()+
-    theme_bw()+
-    theme_animint(width=800)+
-    geom_text(aes(
-      left, log.penalty, 
-      color=model.name,
-      key=paste(model.name, sign.residual),
-      label=ifelse(sign.residual==0, sprintf(
-        "%d intervals correctly predicted", intervals), sprintf(
-          "total too %s = %.1f (%d/%d intervals)",
-          ifelse(sign.residual==1, "high", "low"),
-          total.residual, intervals,
-          possible[, ifelse(sign.residual==1, positive, negative)]))),
-      data=total.thresh.pred,
-      showSelected="Rate",
-      hjust=0)+
-    geom_point(aes(
-      feature, log.penalty, fill=limit),
-      data=train.long,
-      shape=21)+
-    geom_abline(aes(
-      slope=slope,
-      intercept=intercept,
-      color=model.name),
-      showSelected="Rate",
-      data=roc.grid.dt)+
-    geom_segment(aes(
-      log2.n, adj.log.lambda,
-      color=model.name,
-      key=pid.chr,
-      xend=log2.n,
-      yend=adj.log.lambda-residual),
-      size=1,
-      showSelected=c("Rate","limit"),
-      data=grid.label.int)+
-    scale_fill_manual(values=c(min="black", max="white"))+
-    scale_color_manual(values=c(BIC="red", AIC="deepskyblue"))+
-    scale_x_continuous("feature = log(log(n = number of data points to segment))")+
-    scale_y_continuous("<-- more changes     log(penalty)     less changes -->"),
-  duration=list(Rate=1000)
-)
-
-add_selector <- function(DT){
-  DT[, selector := paste0(model.name, ".thresh")]
+pred.dot[, `:=`(
+  TPR.text=c(0.77, 0.62),
+  hjust=c(0,1)
+)]
+model.colors <- c(BIC="red", AIC="deepskyblue")
+pixels <- 450
+roc.diff.dt[, other := ifelse(rate=="FPR", "TPR", "FPR")]
+get_other <- function(model.name){
+  data.table(
+    model.name, roc.diff.dt
+  )[, label := {
+    col.name <- paste0(other,"_",model.name)
+    sprintf("%s = %.4f", col.name, get(col.name))
+  }, by=.(model.name,other)][]
 }
-add_selector(some.thresh)
-add_selector(pred.dot)
-add_selector(total.thresh.pred)
-add_selector(residual.thresh.pred)
-thresh.colors <- c(predicted="green", min.error="black", other="white")
-viz <- list(
-  title="BIC versus learned penalty in neuroblastoma data",
-  thresholds=ggplot()+
-    theme_bw()+
-    guides(fill="none", color="none")+
-    geom_line(aes(
-      mid.thresh, errors,
-      group=model.name,
-      color=model.name),
-      showSelected="model.name",
-      data=some.thresh)+
-    geom_tallrect(aes(
-      xmin=prev.thresh, xmax=next.thresh,
-      color=model.name),
-      clickSelects=c(selector="mid.thresh"),
-      showSelected="model.name",
-      size=3,
-      alpha=0.5,
-      data=some.thresh)+
-    ylab("total incorrect labels")+
-    xlab("constant/threshold added to log(penalty)")+
-    scale_fill_manual(values=thresh.colors)+
-    scale_color_manual(values=c(BIC="red", learned="deepskyblue"))+
-    geom_point(aes(
-    (max.thresh+min.thresh)/2, errors,
-    color=model.name,
-    fill=threshold),
-    clickSelects=c(selector="mid.thresh"),
-    showSelected=c("model.name","threshold"),
-    data=pred.dot,
-    size=4,
-    shape=21),
+sign2col=c("1"="positive","0"="total","-1"="negative")
+sign2rate=c("1"="FN","0"="correct","-1"="FP")
+total.thresh.pred[, label := sprintf(
+  "total %s = %d / %d possible",
+  sign2rate[paste(sign.residual)],
+  intervals,
+  unlist(as.list(possible)[sign2col[paste(sign.residual)]])
+)]
+one.y.vec <- seq(0.4, 0.74, by=0.02)
+one.x.vec <- seq(0.1, 0.03, by=-0.013)
+grid.label.not.same <- grid.label.dots[
+  same==FALSE
+][, `:=`(
+  label = ifelse(limit=="max", "breakpoint", "normal"),
+  y=rep(one.y.vec, l=.N),
+  x=rep(one.x.vec, each=length(one.y.vec))[1:.N]
+), by=Rate
+]
+ggplot()+
+  geom_text(aes(
+    x, y, label=pid.chr, color=label),
+    hjust=1,
+    data=grid.label.not.same)+
+  scale_color_manual(values=label.colors)+
+  facet_wrap("Rate")
+label.colors <- c(
+  breakpoint="violet",
+  normal="orange")
+animint(
+  title="AIC/BIC change-point detection comparison using ROC curves",
+  out.dir="figure-differences-interactive",
   roc=ggplot()+
+    ggtitle("ROC curves, select comparison")+
     theme_bw()+
+    theme_animint(width=pixels, height=pixels)+
+    theme(legend.position="none")+
+    scale_fill_manual(values=model.colors)+
+    scale_color_manual(values=model.colors)+
+    geom_text(aes(
+      x, y, label=pid.chr),
+      hjust=1,
+      showSelected="Rate",
+      clickSelects="pid.chr",
+      data=grid.label.not.same)+
     geom_text(aes(
       FPR, TPR,
       color=model.name,
+      hjust=hjust,
       label=sprintf("%s AUC = %.4f", model.name, auc)),
-      hjust=1,
+      showSelected="model.name",
+      vjust=0,
       data=auc)+
     geom_path(aes(
       FPR, TPR,
       color=model.name,
       group=model.name),
-      size=2,
+      showSelected="model.name",
       data=roc)+
-    scale_fill_manual(values=thresh.colors, breaks=names(thresh.colors))+
-    scale_color_manual(values=c(BIC="red", learned="deepskyblue"))+
-    geom_point(aes(
-      FPR, TPR),
-      showSelected=c(selector="mid.thresh","threshold","model.name"),
-      data=some.thresh,
-      color="grey",
-      size=6,
-      shape=21)+
+    geom_segment(aes(
+      FPR, TPR.text,
+      xend=FPR, yend=TPR),
+      showSelected="model.name",
+      data=pred.dot)+
+    geom_text(aes(
+      FPR, TPR.text,
+      label=paste(model.name, "default"),
+      hjust=hjust,
+      color=model.name),
+      showSelected="model.name",
+      data=pred.dot)+
+    geom_segment(aes(
+      FPR_AIC, TPR_AIC,
+      xend=FPR_BIC, yend=TPR_BIC),
+      size=4,
+      alpha=0.7,
+      clickSelects="Rate",
+      data=roc.diff.dt)+
     geom_point(aes(
       FPR, TPR,
-      color=model.name, fill=threshold),
-      clickSelects=c(selector="mid.thresh"),
-      data=some.thresh,
-      size=4,
-      alpha=0.8,
+      fill=model.name),
+      showSelected="model.name",
+      color="black",
+      data=pred.dot,
+      size=3,
       shape=21)+
-    coord_equal(),
+    geom_text(aes(
+      0, 1,
+      key="SelectedRate",
+      label=paste("Selected", Rate)),
+      hjust=0,
+      showSelected="Rate",
+      data=roc.diff.dt)+
+    geom_text(aes(
+      0, 0.97,
+      key="AIC",
+      color=model.name,
+      label=label),
+      hjust=0,
+      showSelected=c("Rate","model.name"),
+      data=get_other("AIC"))+
+    geom_text(aes(
+      0, 0.94,
+      key="BIC",
+      color=model.name,
+      label=label),
+      hjust=0,
+      showSelected=c("Rate","model.name"),
+      data=get_other("BIC"))+
+    geom_text(aes(
+      FPR_AIC,
+      TPR_BIC-ifelse(vjust==1, 0.02, 0),
+      label=diff,
+      hjust=hjust),
+      clickSelects="Rate",
+      data=roc.diff.dt)+
+    coord_cartesian(xlim=c(0, 0.1), ylim=c(0.4, 1)),
   regression=ggplot()+
+    ggtitle("Predicted penalties and errors in BIC space")+
     theme_bw()+
-    theme_animint(width=800)+
+    theme_animint(width=600, height=pixels)+
+    geom_abline(aes(
+      slope=slope,
+      intercept=intercept,
+      key=model.name,
+      color=model.name),
+      showSelected="Rate",
+      data=roc.grid.dt)+
     geom_text(aes(
       left, log.penalty, 
       color=model.name,
       key=paste(model.name, sign.residual),
-      label=ifelse(sign.residual==0, sprintf(
-        "%d intervals correctly predicted", intervals), sprintf(
-          "total too %s = %.1f (%d/%d intervals)",
-          ifelse(sign.residual==1, "high", "low"),
-          total.residual, intervals,
-          possible[, ifelse(sign.residual==1, positive, negative)]))),
-      showSelected=c(selector="mid.thresh"),
+      label=label),
       data=total.thresh.pred,
+      showSelected="Rate",
       hjust=0)+
-    geom_point(aes(
-      feature, min.log.lambda, fill=limit),
-      data=data.table(
-        limit="min", train.dt[is.finite(min.log.lambda),]),
-      shape=21)+
-    geom_point(aes(
-      feature, max.log.lambda, fill=limit),
-      data=data.table(
-        limit="max", train.dt[is.finite(max.log.lambda),]),
-      shape=21)+
-    geom_abline(aes(
-      slope=slope,
-      intercept=intercept, color=model.name),
-      showSelected=c(selector="mid.thresh"),
-      data=some.thresh)+
     geom_segment(aes(
-      feature, pred.log.lambda, xend=feature, color=model.name,
-      yend=pred.log.lambda-residual),
-      showSelected=c(selector="mid.thresh"),
-      size=1,
-      data=residual.thresh.pred)+
+      log2.n, adj.log.lambda,
+      alpha=same,
+      color=model.name,
+      key=paste(pid.chr, model.name),
+      size=model.name,
+      xend=log2.n,
+      yend=adj.log.lambda-residual),
+      showSelected=c("Rate","limit"),
+      clickSelects="pid.chr",
+      data=grid.label.int)+
+    geom_point(aes(
+      log2.n, log.penalty,
+      fill=limit,
+      key=pid.chr,
+      alpha=same),
+      showSelected="Rate",
+      clickSelects="pid.chr",
+      color="green",
+      color_off="grey50",
+      stroke=2,
+      data=grid.label.dots,
+      shape=21)+
+    scale_alpha_manual(values=c("TRUE"=0.2,"FALSE"=0.8))+
     scale_fill_manual(values=c(min="black", max="white"))+
-    scale_color_manual(values=c(BIC="red", learned="deepskyblue"))+
+    scale_color_manual(values=model.colors)+
+    scale_size_manual(values=c(BIC=2, AIC=1))+
     scale_x_continuous("feature = log(log(n = number of data points to segment))")+
     scale_y_continuous("<-- more changes     log(penalty)     less changes -->"),
-  source="https://github.com/tdhock/change-tutorial/blob/master/figure-differences-interactive.R",
-  first=list())
-pred.thresh.only <- some.thresh[threshold=="predicted"]
-for(row.i in 1:nrow(pred.thresh.only)){
-  r <- pred.thresh.only[row.i, ]
-  viz$first[[paste0(r$model.name, ".thresh")]] <- r$mid.thresh
-}
-animint2dir(viz, "figure-differences-interactive")
+  duration=list(Rate=1000)
+)
 if(FALSE){
   animint2pages(viz, "2023-11-interval-regression-differences")
 }
 
-## TODO binseg vs DP.
+## TODO binseg(monotonic) vs DP(could be non-monotonic).
 
-## TODO AIC, CV.
+## TODO CV.
