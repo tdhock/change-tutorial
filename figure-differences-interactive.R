@@ -9,15 +9,19 @@ if(file.exists("Segmentor.models.RData")){
 }else{
   segs.list <- list()
   loss.list <- list()
-  for(problem.i in seq_along(labeled.problem.names)){
-    problem.name <- labeled.problem.names[[problem.i]]
-    meta <- meta.df[problem.i,]
-    cat(sprintf("%4d / %4d problems %s\n", problem.i, length(labeled.problem.names), problem.name))
-    pro <- problem.list[[problem.name]]
-    fit <- Segmentor3IsBack::Segmentor(pro$logratio, model=2, Kmax=max.segments)
+  ann.dt <- nb.dts[["annotations"]]
+  for(problem.i in 1:nrow(ann.dt)){
+    meta <- ann.dt[problem.i, .(profile.id, chromosome)]
+    cat(sprintf(
+      "%4d / %4d problems\n",
+      problem.i, nrow(ann.dt)))
+    pro <- nb.dts[["profiles"]][meta]
+    max.segments <- 20
+    fit <- jointseg::Fpsn(pro$logratio, max.segments)
     rss.vec <- rep(NA, max.segments)
+    cum.vec <- c(0, cumsum(pro$logratio))
     for(n.segments in 1:max.segments){
-      end <- fit@breaks[n.segments, 1:n.segments]
+      end <- fit[["t.est"]][n.segments, 1:n.segments]
       data.before.change <- end[-n.segments]
       data.after.change <- data.before.change+1
       pos.before.change <- as.integer(
@@ -25,11 +29,11 @@ if(file.exists("Segmentor.models.RData")){
       start <- c(1, data.after.change)
       chromStart <- c(pro$position[1], pos.before.change)
       chromEnd <- c(pos.before.change, max(pro$position))
-      seg.mean.vec <- fit@parameters[n.segments, 1:n.segments]
+      seg.mean.vec <- (cum.vec[end+1]-cum.vec[start])/(end-start+1)
       data.mean.vec <- rep(seg.mean.vec, end-start+1)
       residual.vec <- pro$logratio - data.mean.vec
-      rss.vec[n.segments] <- sum(residual.vec * residual.vec)
-      segs.list[[paste(problem.name, n.segments)]] <- data.table(
+      rss.vec[n.segments] <- sum(residual.vec^2)
+      segs.list[[paste(problem.i, n.segments)]] <- data.table(
         meta,
         n.segments,
         start,
@@ -38,12 +42,7 @@ if(file.exists("Segmentor.models.RData")){
         chromEnd,
         mean=seg.mean.vec)
     }
-    if(FALSE){
-      ## The likelihood computed by the Segmentor function is just an
-      ## affine transformation of the sum of squared residuals.
-      plot(rss.vec, fit@likelihood)
-    }
-    loss.list[[paste(problem.name, n.segments)]] <- data.table(
+    loss.list[[paste(problem.i, n.segments)]] <- data.table(
       meta,
       n.segments=1:max.segments,
       loss=rss.vec)
@@ -314,7 +313,7 @@ select_rate <- function(DT){
   }
 }
 lapply(nb.dts, select_rate)
-
+select_rate(labeled.profiles)
 train.long <- long_limits(train.dt)
 select_rate(grid.label.int)
 grid.label.dots <- long_limits(grid.label.int[model.name=="BIC"])#arbitrary.
@@ -327,7 +326,6 @@ pred.dot[, `:=`(
   hjust=c(0,1)
 )]
 model.colors <- c(BIC="red", AIC="deepskyblue")
-model.sizes <- c(BIC=2, AIC=1)
 pixels <- 450
 roc.diff.dt[, other := ifelse(rate=="FPR", "TPR", "FPR")]
 get_other <- function(model.name){
@@ -358,6 +356,8 @@ grid.label.not.same[, `:=`(
 label.colors <- c(
   breakpoint="violet",
   normal="orange")
+limit2label <- c(max="breakpoint", min="normal")
+limit.colors <- structure(label.colors[limit2label], names=names(limit2label))
 ggplot()+
   geom_text(aes(
     x, y, label=pid.chr, color=label),
@@ -386,9 +386,43 @@ selected.sizes <- selection[
   )
 ]
 Segmentor.selected <- lapply(Segmentor.models, function(DT){
-  DT[selected.sizes, on=.(profile.id, chromosome, n.segments), nomatch=0L]
+  join.dt <- DT[
+    selected.sizes, on=.(profile.id, chromosome, n.segments), nomatch=0L]
+  select_rate(join.dt)
 })
-lapply(Segmentor.selected, select_rate)
+before.norm.list <- c(
+  Segmentor.selected,
+  list(profiles=labeled.profiles,
+       annotations=nb.dts[["annotations"]]))
+norm.list <- list(
+  position=c("position","min","max","chromStart","chromEnd"),
+  logratio=c("logratio","mean"))
+norm.dt <- dcast(
+  labeled.profiles,
+  pid.chr ~ .,
+  list(min,max),
+  value.var=names(norm.list))
+setkey(norm.dt, pid.chr)
+after.norm.list <- list()
+for(data.name in names(before.norm.list)){
+  DT <- before.norm.list[[data.name]]
+  join.dt <- norm.dt[DT, on="pid.chr"]
+  for(norm.name in names(norm.list)){
+    gcol <- function(m)join.dt[[paste0(norm.name,"_",m)]]
+    m <- gcol("min")
+    M <- gcol("max")
+    denominator <- M-m
+    for(col.name in norm.list[[norm.name]]){
+      if(col.name %in% names(join.dt)){
+        j <- paste0("norm_", col.name)
+        before <- join.dt[[col.name]]
+        value <- (before-m)/denominator
+        set(join.dt, j=j, value=value)
+      }
+    }
+  }
+  after.norm.list[[data.name]] <- join.dt
+}
 animint(
   title="AIC/BIC change-point detection comparison using ROC curves",
   out.dir="figure-differences-interactive",
@@ -503,7 +537,6 @@ animint(
       xend=log2.n,
       yend=adj.log.lambda-residual),
       showSelected=c("Rate","limit"),
-      clickSelects="pid.chr",
       data=grid.label.int)+
     geom_point(aes(
       log2.n, log.penalty,
@@ -515,47 +548,53 @@ animint(
       color="blue",
       color_off="grey50",
       stroke=2,
+      size=3,
       data=grid.label.dots,
       shape=21)+
-    scale_alpha_manual(values=c("TRUE"=0.2,"FALSE"=0.8))+
-    scale_fill_manual(values=c(min="black", max="white"))+
+    scale_alpha_manual(values=c("TRUE"=0.1,"FALSE"=1))+
+    scale_fill_manual(values=limit.colors)+
     scale_color_manual(values=model.colors)+
-    scale_size_manual(values=model.sizes)+
-    scale_x_continuous("feature = log(log(n = number of data points to segment))")+
-    scale_y_continuous("<-- more changes     log(penalty)     less changes -->"),
+    scale_size_manual(values=c(BIC=2, AIC=1))+
+    scale_x_continuous(
+      "feature = log(log(n = number of data points to segment))")+
+    scale_y_continuous(
+      "<-- more changes log(penalty) less changes -->"),
   data=ggplot()+
+    ggtitle("Predicted changes for selected profile")+
     theme_bw()+
     theme_animint(
-      width=1000, height=300,
-      update_axes=c("x","y"))+    
+      ##update_axes=c("x","y"),#TODO
+      width=1000, height=300)+    
     geom_tallrect(aes(
-      xmin=min, xmax=max, fill=annotation),
+      xmin=norm_min, xmax=norm_max, fill=annotation),
       showSelected="pid.chr",
       color="grey",
-      data=nb.dts[["annotations"]])+
+      data=after.norm.list[["annotations"]])+
     scale_fill_manual(values=label.colors)+
     geom_point(aes(
-      position, logratio),
+      norm_position, norm_logratio),
       showSelected="pid.chr",
       chunk_vars="pid.chr",
-      data=nb.dts[["profiles"]])+
+      data=after.norm.list[["profiles"]])+
     scale_color_manual(values=model.colors)+
-    scale_size_manual(values=model.sizes)+
+    scale_size_manual(values=c(BIC=1, AIC=2))+
     geom_segment(aes(
-      chromStart, mean,
-      xend=chromEnd, yend=mean,
+      norm_chromStart, norm_mean,
+      xend=norm_chromEnd, yend=norm_mean,
       color=model.name,
+      key=paste(chromStart, model.name),
       size=model.name),
-      showSelected=c("Rate","pid.chr"),
+      showSelected=c("pid.chr","Rate"),
       chunk_vars="pid.chr",
-      data=Segmentor.selected$segs)+
+      data=after.norm.list[["segs"]])+
     geom_vline(aes(
-      xintercept=chromStart,
+      xintercept=norm_chromStart,
       color=model.name,
+      key=paste(chromStart, model.name),
       size=model.name),
-      showSelected=c("Rate","pid.chr"),
+      showSelected=c("pid.chr","Rate"),
       chunk_vars="pid.chr",
-      data=Segmentor.selected$changes),
+      data=after.norm.list[["changes"]]),
   duration=list(Rate=1000)
 )
 if(FALSE){
