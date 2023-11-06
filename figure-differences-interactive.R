@@ -522,6 +522,7 @@ animint(
     geom_point(aes(
       position, logratio),
       showSelected="pid.chr",
+      chunk_vars="pid.chr",
       data=nb.dts[["profiles"]]),
   duration=list(Rate=1000)
 )
