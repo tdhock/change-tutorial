@@ -142,7 +142,7 @@ pred.dot <- do.call(rbind, pred.dot.list)
 auc.polygon <- do.call(rbind, auc.polygon.list)
 
 ## Zoomed ROC curves.
-auc$TPR <- c(0.84, 1.02)
+auc$TPR <- c(0.84, 1)
 auc$FPR <- 0.1
 auc$hjust <- 1
 ggplot()+
@@ -345,14 +345,16 @@ total.thresh.pred[, label := sprintf(
 )]
 one.y.vec <- seq(0.4, 0.74, by=0.02)
 one.x.vec <- seq(0.1, 0.03, by=-0.013)
-grid.label.not.same <- grid.label.dots[
-  same==FALSE
-][, `:=`(
+grid.label.not.same <- grid.label.dots[same==FALSE]
+setkey(grid.label.not.same, Rate, limit)
+grid.label.not.same[, `:=`(
   label = ifelse(limit=="max", "breakpoint", "normal"),
   y=rep(one.y.vec, l=.N),
   x=rep(one.x.vec, each=length(one.y.vec))[1:.N]
-), by=Rate
-]
+), by=Rate]
+label.colors <- c(
+  breakpoint="violet",
+  normal="orange")
 ggplot()+
   geom_text(aes(
     x, y, label=pid.chr, color=label),
@@ -360,9 +362,17 @@ ggplot()+
     data=grid.label.not.same)+
   scale_color_manual(values=label.colors)+
   facet_wrap("Rate")
-label.colors <- c(
-  breakpoint="violet",
-  normal="orange")
+geom_text_label <- function(L){
+  geom_text(aes(
+    x, y,
+    key=pid.chr,
+    label=pid.chr),
+    hjust=1,
+    showSelected=c("Rate","limit"),
+    color=label.colors[[L]],
+    clickSelects="pid.chr",
+    data=grid.label.not.same[label==L])
+}
 animint(
   title="AIC/BIC change-point detection comparison using ROC curves",
   out.dir="figure-differences-interactive",
@@ -373,12 +383,8 @@ animint(
     theme(legend.position="none")+
     scale_fill_manual(values=model.colors)+
     scale_color_manual(values=model.colors)+
-    geom_text(aes(
-      x, y, label=pid.chr),
-      hjust=1,
-      showSelected="Rate",
-      clickSelects="pid.chr",
-      data=grid.label.not.same)+
+    geom_text_label("breakpoint")+
+    geom_text_label("normal")+
     geom_text(aes(
       FPR, TPR,
       color=model.name,
@@ -488,7 +494,7 @@ animint(
       alpha=same),
       showSelected="Rate",
       clickSelects="pid.chr",
-      color="green",
+      color="blue",
       color_off="grey50",
       stroke=2,
       data=grid.label.dots,
