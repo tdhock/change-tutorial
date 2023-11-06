@@ -313,6 +313,7 @@ select_rate <- function(DT){
     DT[, pid.chr := paste0(profile.id, ".", chromosome)]
   }
 }
+lapply(nb.dts, select_rate)
 train.long <- long_limits(train.dt)
 select_rate(grid.label.int)
 grid.label.dots <- long_limits(grid.label.int[model.name=="BIC"])#arbitrary.
@@ -378,6 +379,8 @@ animint(
   out.dir="figure-differences-interactive",
   roc=ggplot()+
     ggtitle("ROC curves, select comparison")+
+    xlab("False Positive Rate")+
+    ylab("True Positive Rate")+
     theme_bw()+
     theme_animint(width=pixels, height=pixels)+
     theme(legend.position="none")+
@@ -505,6 +508,21 @@ animint(
     scale_size_manual(values=c(BIC=2, AIC=1))+
     scale_x_continuous("feature = log(log(n = number of data points to segment))")+
     scale_y_continuous("<-- more changes     log(penalty)     less changes -->"),
+  data=ggplot()+
+    theme_bw()+
+    theme_animint(
+      width=1000, height=300,
+      update_axes=c("x","y"))+    
+    geom_tallrect(aes(
+      xmin=min, xmax=max, fill=annotation),
+      showSelected="pid.chr",
+      color="grey",
+      data=nb.dts[["annotations"]])+
+    scale_fill_manual(values=label.colors)+
+    geom_point(aes(
+      position, logratio),
+      showSelected="pid.chr",
+      data=nb.dts[["profiles"]]),
   duration=list(Rate=1000)
 )
 if(FALSE){
