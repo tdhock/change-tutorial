@@ -57,9 +57,9 @@ if(file.exists("Segmentor.models.RData")){
 selection <- Segmentor.models$loss[, penaltyLearning::modelSelection(
   .SD, complexity="n.segments"
 ), by=.(profile.id, chromosome)]
-changes <- Segmentor.models$segs[1 < start]
+Segmentor.models$changes <- Segmentor.models$segs[1 < start]
 errors <- penaltyLearning::labelError(
-  selection, neuroblastoma$annotations, changes,
+  selection, neuroblastoma$annotations, Segmentor.models$changes,
   change.var="chromStart",
   label.vars=c("min", "max"),
   model.vars="n.segments",
@@ -314,6 +314,7 @@ select_rate <- function(DT){
   }
 }
 lapply(nb.dts, select_rate)
+
 train.long <- long_limits(train.dt)
 select_rate(grid.label.int)
 grid.label.dots <- long_limits(grid.label.int[model.name=="BIC"])#arbitrary.
@@ -326,6 +327,7 @@ pred.dot[, `:=`(
   hjust=c(0,1)
 )]
 model.colors <- c(BIC="red", AIC="deepskyblue")
+model.sizes <- c(BIC=2, AIC=1)
 pixels <- 450
 roc.diff.dt[, other := ifelse(rate=="FPR", "TPR", "FPR")]
 get_other <- function(model.name){
@@ -374,6 +376,19 @@ geom_text_label <- function(L){
     clickSelects="pid.chr",
     data=grid.label.not.same[label==L])
 }
+selected.sizes <- selection[
+  adj.pred,
+  .(rate, grid, profile.id, chromosome, model.name, n.segments),
+  on=.(
+    profile.id, chromosome,
+    min.log.lambda<adj.log.lambda,
+    max.log.lambda>adj.log.lambda
+  )
+]
+Segmentor.selected <- lapply(Segmentor.models, function(DT){
+  DT[selected.sizes, on=.(profile.id, chromosome, n.segments), nomatch=0L]
+})
+lapply(Segmentor.selected, select_rate)
 animint(
   title="AIC/BIC change-point detection comparison using ROC curves",
   out.dir="figure-differences-interactive",
@@ -505,7 +520,7 @@ animint(
     scale_alpha_manual(values=c("TRUE"=0.2,"FALSE"=0.8))+
     scale_fill_manual(values=c(min="black", max="white"))+
     scale_color_manual(values=model.colors)+
-    scale_size_manual(values=c(BIC=2, AIC=1))+
+    scale_size_manual(values=model.sizes)+
     scale_x_continuous("feature = log(log(n = number of data points to segment))")+
     scale_y_continuous("<-- more changes     log(penalty)     less changes -->"),
   data=ggplot()+
@@ -523,7 +538,24 @@ animint(
       position, logratio),
       showSelected="pid.chr",
       chunk_vars="pid.chr",
-      data=nb.dts[["profiles"]]),
+      data=nb.dts[["profiles"]])+
+    scale_color_manual(values=model.colors)+
+    scale_size_manual(values=model.sizes)+
+    geom_segment(aes(
+      chromStart, mean,
+      xend=chromEnd, yend=mean,
+      color=model.name,
+      size=model.name),
+      showSelected=c("Rate","pid.chr"),
+      chunk_vars="pid.chr",
+      data=Segmentor.selected$segs)+
+    geom_vline(aes(
+      xintercept=chromStart,
+      color=model.name,
+      size=model.name),
+      showSelected=c("Rate","pid.chr"),
+      chunk_vars="pid.chr",
+      data=Segmentor.selected$changes),
   duration=list(Rate=1000)
 )
 if(FALSE){
