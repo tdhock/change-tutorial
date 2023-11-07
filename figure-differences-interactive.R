@@ -181,6 +181,7 @@ for(rate in names(rate.grid.list)){
   , .SD[grid.dt, roll=Inf, mult="first", on="grid"]
   , by=model.name
   ]#max FP for given TP.
+  grid.roc[pred.dot, mid.thresh := 0, on=c("model.name",rate)]
   rate.wide <- dcast(
     grid.roc,
     grid ~ model.name,
@@ -286,9 +287,9 @@ total.thresh.pred <- grid.label.int[, list(
   intervals=.N
 ), by=.(model.name, sign.residual=sign(residual), rate, grid)
 ][
-, top := ifelse(model.name=="BIC", 6.5, -4)
+, top := ifelse(model.name=="AIC", 6.5, -4)
 ][
-, left := ifelse(model.name=="BIC", 1.45, 1.8)
+, left := ifelse(model.name=="AIC", 1.45, 1.81)
 ][
 , log.penalty := top-(1-sign.residual)*0.7
 ]
@@ -316,14 +317,17 @@ lapply(nb.dts, select_rate)
 select_rate(labeled.profiles)
 train.long <- long_limits(train.dt)
 select_rate(grid.label.int)
-grid.label.dots <- long_limits(grid.label.int[model.name=="BIC"])#arbitrary.
+ref.model <- "BIC"#arbitrary.
+other.model <- "AIC"
+grid.label.dots <- long_limits(grid.label.int[model.name==ref.model])
 select_rate(total.thresh.pred)
 select_rate(roc.grid.dt)
 select_rate(roc.diff.dt)
 select_rate(train.long)
 pred.dot[, `:=`(
   TPR.text=c(0.77, 0.62),
-  hjust=c(0,1)
+  hjust=c(0,1),
+  FPR.text=FPR+ifelse(model.name=="AIC",0.002,0)
 )]
 model.colors <- c(BIC="red", AIC="deepskyblue")
 pixels <- 450
@@ -354,7 +358,7 @@ grid.label.not.same[, `:=`(
   x=rep(one.x.vec, each=length(one.y.vec))[1:.N]
 ), by=Rate]
 label.colors <- c(
-  breakpoint="violet",
+  breakpoint="purple",
   normal="orange")
 limit2label <- c(max="breakpoint", min="normal")
 limit.colors <- structure(label.colors[limit2label], names=names(limit2label))
@@ -365,17 +369,8 @@ ggplot()+
     data=grid.label.not.same)+
   scale_color_manual(values=label.colors)+
   facet_wrap("Rate")
-geom_text_label <- function(L){
-  geom_text(aes(
-    x, y,
-    key=pid.chr,
-    label=pid.chr),
-    hjust=1,
-    showSelected=c("Rate","limit"),
-    color=label.colors[[L]],
-    clickSelects="pid.chr",
-    data=grid.label.not.same[label==L])
-}
+grid.label.not.same[
+, model.name := ifelse(status=="correct", ref.model, other.model)]
 selected.sizes <- selection[
   adj.pred,
   .(rate, grid, profile.id, chromosome, model.name, n.segments),
@@ -390,6 +385,12 @@ Segmentor.selected <- lapply(Segmentor.models, function(DT){
     selected.sizes, on=.(profile.id, chromosome, n.segments), nomatch=0L]
   select_rate(join.dt)
 })
+select_rate(adj.pred)
+adj.pred[, `:=`(
+  adj.lambda = exp(adj.log.lambda),
+  norm_position = ifelse(model.name=="AIC", 0, 1),
+  hjust=ifelse(model.name=="AIC", 0, 1)
+)]
 before.norm.list <- c(
   Segmentor.selected,
   list(profiles=labeled.profiles,
@@ -423,7 +424,18 @@ for(data.name in names(before.norm.list)){
   }
   after.norm.list[[data.name]] <- join.dt
 }
-animint(
+geom_text_label <- function(L){
+  geom_text(aes(
+    x, y,
+    key=pid.chr,
+    label=pid.chr),
+    hjust=1,
+    showSelected=c("Rate","model.name","limit","same"),
+    color=label.colors[[L]],
+    clickSelects="pid.chr",
+    data=grid.label.not.same[label==L])
+}
+viz <- animint(
   title="AIC/BIC change-point detection comparison using ROC curves",
   out.dir="figure-differences-interactive",
   roc=ggplot()+
@@ -435,6 +447,24 @@ animint(
     theme(legend.position="none")+
     scale_fill_manual(values=model.colors)+
     scale_color_manual(values=model.colors)+
+    geom_text(aes(
+      x, y, label=label, hjust=hjust),
+      data=rbind(
+        data.table(label=c(
+          "Black text shows number",
+          "of label error differences"),
+          x=0, y=c(0.88, 0.86), hjust=0),
+        data.table(label=c(
+          "Label error differences:",
+          "(dot shows correct model)"),
+          x=0.1, y=c(0.78, 0.76), hjust=1)))+
+    geom_point(aes(
+      x, y,
+      color=model.name,
+      key=pid.chr),
+      showSelected=c("Rate","model.name","limit","same"),
+      clickSelects="pid.chr",
+      data=grid.label.not.same)+
     geom_text_label("breakpoint")+
     geom_text_label("normal")+
     geom_text(aes(
@@ -454,6 +484,13 @@ animint(
     geom_segment(aes(
       FPR, TPR.text,
       xend=FPR, yend=TPR),
+      showSelected="model.name",
+      data=pred.dot)+
+    geom_text(aes(
+      FPR.text, TPR.text+0.02,
+      label=paste(errors, "errors"),
+      hjust=hjust,
+      color=model.name),
       showSelected="model.name",
       data=pred.dot)+
     geom_text(aes(
@@ -564,11 +601,14 @@ animint(
     theme_bw()+
     theme_animint(
       ##update_axes=c("x","y"),#TODO
-      width=1000, height=300)+    
-    geom_tallrect(aes(
-      xmin=norm_min, xmax=norm_max, fill=annotation),
+      width=1000, height=300)+
+    geom_rect(aes(
+      xmin=norm_min, xmax=norm_max,
+      ymin=0, ymax=1,
+      fill=annotation),
       showSelected="pid.chr",
       color="grey",
+      alpha=0.5,
       data=after.norm.list[["annotations"]])+
     scale_fill_manual(values=label.colors)+
     geom_point(aes(
@@ -577,7 +617,7 @@ animint(
       chunk_vars="pid.chr",
       data=after.norm.list[["profiles"]])+
     scale_color_manual(values=model.colors)+
-    scale_size_manual(values=c(BIC=1, AIC=2))+
+    scale_size_manual(values=c(BIC=5, AIC=2))+
     geom_segment(aes(
       norm_chromStart, norm_mean,
       xend=norm_chromEnd, yend=norm_mean,
@@ -587,16 +627,27 @@ animint(
       showSelected=c("pid.chr","Rate"),
       chunk_vars="pid.chr",
       data=after.norm.list[["segs"]])+
-    geom_vline(aes(
-      xintercept=norm_chromStart,
+    geom_segment(aes(
+      norm_chromStart, 0,
+      xend=norm_chromStart, yend=1,
       color=model.name,
       key=paste(chromStart, model.name),
       size=model.name),
       showSelected=c("pid.chr","Rate"),
       chunk_vars="pid.chr",
-      data=after.norm.list[["changes"]]),
-  duration=list(Rate=1000)
+      data=after.norm.list[["changes"]])+
+    geom_text(aes(
+      norm_position, 1,
+      hjust=hjust,
+      color=model.name,
+      key=model.name,
+      label=sprintf("Adjusted %s penalty = %.4f", model.name, adj.lambda)),
+      showSelected=c("pid.chr","Rate"),
+      data=adj.pred),
+  duration=list(Rate=1000),
+  source="https://github.com/tdhock/change-tutorial/blob/master/figure-differences-interactive.R"
 )
+viz
 if(FALSE){
   animint2pages(viz, "2023-11-interval-regression-differences")
 }
