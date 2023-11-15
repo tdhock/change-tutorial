@@ -432,6 +432,7 @@ geom_text_label <- function(L){
     hjust=1,
     showSelected=c("Rate","model.name","limit","same"),
     color=label.colors[[L]],
+    color_off=label.colors[[L]],
     clickSelects="pid.chr",
     data=grid.label.not.same[label==L])
 }
