@@ -1,5 +1,5 @@
 source("packages.R")
-source("animint.R")
+library(animint2)
 
 data(neuroblastoma, package="neuroblastoma")
 load("Segmentor.models.RData")
@@ -35,12 +35,18 @@ model.fun.list <- list(
   }, learned=function(train.dt){
     target.mat <- train.dt[, cbind(min.log.lambda, max.log.lambda)]
     feature.mat <- train.dt[, cbind(feature)]
-    fit <- survreg(
-      Surv(min.log.lambda, max.log.lambda, type="interval2") ~ feature,
-      train.dt, dist="gaussian")
+    if(FALSE){#buggy as of R-4.4.1
+      fit <- survreg(
+        Surv(min.log.lambda, max.log.lambda, type="interval2") ~ feature,
+        train.dt, dist="gaussian")
+      weight.vec <- coef(fit)
+    }
+    fit <- penaltyLearning::IntervalRegressionUnregularized(
+      feature.mat, target.mat)
+    weight.vec <- coef(fit)[,"0"]
     data.table(
-      slope=coef(fit)[["feature"]],
-      intercept=coef(fit)[["(Intercept)"]]
+      slope=weight.vec[["feature"]],
+      intercept=weight.vec[["(Intercept)"]]
       )
   })
 model.label.vec <- c(
