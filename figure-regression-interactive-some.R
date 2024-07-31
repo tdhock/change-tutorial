@@ -4,7 +4,11 @@ library(animint2)
 data(neuroblastoma, package="neuroblastoma")
 load("Segmentor.models.RData")
 
-ids.str <- paste(c(1, 4, 6, 8, 10, 11))
+ids.str <- paste(c(
+  1, 4, 6, 8, 10, 11,
+  ##120,#finite coefs and warns
+  13,#finite coefs, no warning
+  NULL))
 selection <-
   Segmentor.models$loss[profile.id %in% ids.str, modelSelection(
     .SD, complexity="n.segments"
@@ -19,7 +23,6 @@ errors <- labelError(
   label.vars=c("min", "max"),
   model.vars="n.segments",
   problem.vars=c("profile.id", "chromosome"))
-
 target.dt <- targetIntervals(
   errors$model.errors, c("profile.id", "chromosome"))
 some.profiles <- data.table(
@@ -28,18 +31,17 @@ feature.dt <-  some.profiles[, list(
   log2.n=log(log(.N)),
   log.mad=log(median(abs(diff(logratio))))
 ), by=.(profile.id, chromosome)]
-
 model.fun.list <- list(
   BIC=function(train.dt){
     data.table(slope=1, intercept=0)
   }, learned=function(train.dt){
     target.mat <- train.dt[, cbind(min.log.lambda, max.log.lambda)]
     feature.mat <- train.dt[, cbind(feature)]
-    if(FALSE){#buggy as of R-4.4.1
+    if(TRUE){#buggy as of R-4.4.1
       fit <- survreg(
         Surv(min.log.lambda, max.log.lambda, type="interval2") ~ feature,
         train.dt, dist="gaussian")
-      weight.vec <- coef(fit)
+      print(weight.vec <- coef(fit))
     }
     fit <- penaltyLearning::IntervalRegressionUnregularized(
       feature.mat, target.mat)
@@ -143,6 +145,11 @@ gg <- ggplot()+
   scale_x_continuous("feature")+
   scale_y_continuous("<-- more changes     log(penalty)     less changes -->")
 print(gg)
+
+(out.dt <- model.train.dt[, .(
+  id=as.integer(paste(profile.id)), lo=min.log.lambda, hi=max.log.lambda, feature)])
+dput(data.frame(out.dt))
+
 
 w <- roc[is.finite(min.thresh), abs(mean(diff(min.thresh)))]
 roc[, prev.thresh := ifelse(min.thresh==-Inf, max.thresh-w, min.thresh)]
