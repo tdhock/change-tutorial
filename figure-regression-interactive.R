@@ -1,6 +1,10 @@
 source("packages.R")
 source("animint.R")
-
+## Visualizes all of the data points, comparing two models (BIC and
+## learned), using three plots: threshold, ROC, regression. In
+## contrast figure-regression-interactive-some.R shows the same two
+## models for only a few data points, but five plots total. The two
+## extra plots show the data and the model selection/error functions.
 data(neuroblastoma, package="neuroblastoma")
 load("Segmentor.models.RData")
 selection <-
@@ -176,7 +180,7 @@ add_selector(pred.dot)
 add_selector(total.thresh.pred)
 add_selector(residual.thresh.pred)
 thresh.colors <- c(predicted="green", min.error="black", other="white")
-viz <- list(
+viz <- animint(
   title="BIC versus learned penalty in neuroblastoma data",
   thresholds=ggplot()+
     theme_bw()+
@@ -282,16 +286,15 @@ viz <- list(
     scale_x_continuous("feature = log(log(n = number of data points to segment))")+
     scale_y_continuous("<-- more changes     log(penalty)     less changes -->"),
   source="https://github.com/tdhock/change-tutorial/blob/master/figure-regression-interactive.R",
+  out.dir="figure-regression-interactive",
   first=list())
 pred.thresh.only <- some.thresh[threshold=="predicted"]
 for(row.i in 1:nrow(pred.thresh.only)){
   r <- pred.thresh.only[row.i, ]
   viz$first[[paste0(r$model.name, ".thresh")]] <- r$mid.thresh
 }
-animint2dir(viz, "figure-regression-interactive")
+viz
 if(FALSE){
   animint2pages(viz, "2023-08-interval-regression-BIC-vs-learned")
+  ## https://rcdata.nau.edu/genomic-ml/animint-gallery/2017-05-08-BIC-versus-learned-penalty/index.html
 }
-
-
-
