@@ -81,6 +81,6 @@ works_with_R(
   survival="3.1.12",
   geometry="0.4.5",
   penaltyLearning="2021.1.19",
-  "animint/animint2@be99e4582054c8f2655db640535f1e320878764e"
+  "animint/animint2@661773aa48368b66a90aff90464237709ea20ee2"
   )
 future::plan(multicore)

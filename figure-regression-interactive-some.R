@@ -96,8 +96,7 @@ for(model.name in names(feature.name.vec)){
   train.dt.list[[model.name]] <- model.train.dt
   feature.result <- ROChange(
     errors$model.errors, model.train.dt, c("profile.id", "chromosome"))
-  pred.dot.list[[model.name]] <- data.table(
-    model.name, model.label, feature.result$thresholds)
+  ##pred.dot.list[[model.name]] <- data.table(model.name, model.label, feature.result$thresholds)
   feature.result$roc[, threshold := {
     ifelse(
       min.thresh < 0 & 0 < max.thresh,
@@ -117,7 +116,7 @@ totals <- do.call(rbind, totals.list)
 reg.line <- do.call(rbind, reg.line.list)
 roc <- do.call(rbind, roc.list)
 auc <- do.call(rbind, auc.list)
-pred.dot <- do.call(rbind, pred.dot.list)
+##pred.dot <- do.call(rbind, pred.dot.list)
 auc.polygon <- do.call(rbind, auc.polygon.list)
 gg <- ggplot()+
   theme_bw()+
@@ -154,11 +153,20 @@ print(gg)
   id=as.integer(paste(profile.id)), lo=min.log.lambda, hi=max.log.lambda, feature)])
 dput(data.frame(out.dt))
 
-w <- roc[is.finite(min.thresh), abs(mean(diff(min.thresh)))]
+w <- roc[is.finite(min.thresh), mean(diff(min.thresh))]
 roc[, prev.thresh := ifelse(min.thresh==-Inf, max.thresh-w, min.thresh)]
 roc[, next.thresh := ifelse(max.thresh==Inf, min.thresh+w, max.thresh)]
-roc[, mid.thresh := (prev.thresh+next.thresh)/2]
-pred.dot[, mid.thresh := (min.thresh+max.thresh)/2]
+roc[, MID.thresh := (prev.thresh+next.thresh)/2]
+round.int <- 1
+u.MID <- length(unique(roc$MID.thresh))
+while({
+  roc[, mid.thresh := round(MID.thresh,round.int)][]
+  length(unique(roc$mid.thresh)) != u.MID
+}){
+  round.int <- round.int+1
+}
+
+##pred.dot[, mid.thresh := (min.thresh+max.thresh)/2]
 some.thresh.pred <- train.dt[roc, on=.(
   model.name, model.label), allow.cartesian=TRUE]
 some.thresh.pred[, pred.plus.thresh := pred.log.lambda + mid.thresh]
@@ -204,10 +212,11 @@ ggplot()+
   theme(panel.margin=grid::unit(0, "lines"))+
   ##facet_grid(. ~ panel.label, scales="free")+
   scale_color_manual(values=model.colors)+
-  geom_segment(aes(prev.thresh, errors,
-                   color=model.name,
-                   xend=next.thresh, yend=errors),
-               data=roc)
+  geom_segment(aes(
+    prev.thresh, errors,
+    color=model.name,
+    xend=next.thresh, yend=errors),
+    data=roc)
 
 auc[, TPR := ifelse(model.name=="BIC", 0.5, 0.4)]
 auc[, FPR := 0.2]
@@ -239,6 +248,8 @@ train.long <- nc::capture_melt_single(
 ][
   break.color.dt, on="limit"
 ]
+
+rect.w <- 0.05
 viz <- animint(
   title="BIC versus learned penalty in neuroblastoma data",
   selection=ggplot()+
@@ -253,6 +264,7 @@ viz <- animint(
       xintercept=pred.log.lambda+mid.thresh,
       color=model.name,
       key=model.name),
+      help="Predicted threshold shown for each model.",
       showSelected=c(selector="mid.thresh", "profile.chrom"),
       clickSelects="model.name",
       data=selection.thresh[
@@ -260,14 +272,22 @@ viz <- animint(
       ],
       alpha=0.8,
       size=4)+
-    guides(color="none")+
+    guides(color="none", fill="none")+
     geom_segment(aes(
-      ifelse(min.log.lambda==-Inf, min(max.log.lambda)-0.5, min.log.lambda),
+      min.log.lambda,
       value,
-      xend=ifelse(max.log.lambda==Inf, max(min.log.lambda)+0.5, max.log.lambda),
+      xend=max.log.lambda,
       yend=value),
+      help="Number of label errors (top) and number of segments (bottom), for the selected data sequence.",
       data=selection.melt,
       showSelected="profile.chrom")+
+    geom_point(aes(
+      value, 0, fill=label),
+      data=data.table(train.long[model.name=="BIC"], variable="errors"),
+      size=4,
+      help="Dot shows limit of target interval of acceptable penalty values, used as the output when training the regression model.",
+      showSelected=c("label", "profile.chrom"))+
+    scale_fill_manual(values=breakpoint.colors)+
     scale_color_manual(values=model.colors),
   profile=ggplot()+
     ggtitle("Selected problem, data sequence")+
@@ -280,6 +300,7 @@ viz <- animint(
       xmin=min/1e6, xmax=max/1e6,
       fill=label),
       alpha=0.3,
+      help="Colored rectangle represents a label, which should contain either at least one change (purple breakpoint label), or no change (orange normal label).",
       showSelected="profile.chrom",
       data=some.anns[, label := annotation])+
     scale_linetype_manual("error type", values=c(
@@ -296,6 +317,7 @@ viz <- animint(
       linetype=status,
       size=model.name,
       color=model.name),
+      help="Border of rectangle shows if there is a label error. False negative occurs for no predicted change-points in a purple breakpoint label, and false positive occurs for at least one predicted change-point in an orange normal label.",
       fill=NA,
       showSelected=c(selector="mid.thresh", "profile.chrom"),
       data=labels.thresh[
@@ -308,6 +330,7 @@ viz <- animint(
       color=model.name, size=model.name),
       showSelected=c(selector="mid.thresh","profile.chrom"),
       linetype="dashed",
+      help="Dashed vertical segments represent predicted change-points.",
       data=changes.thresh[
       , selector := paste0(model.name,".thresh")
       ])+
@@ -315,6 +338,7 @@ viz <- animint(
       position/1e6, logratio),
       showSelected="profile.chrom",
       fill=NA,
+      help="Black dots represent data sequence to segment.",
       data=some.profiles),
   thresholds=ggplot()+
     ggtitle("Total error, select threshold")+
@@ -322,8 +346,16 @@ viz <- animint(
     theme_animint(height=300, width=250)+
     guides(fill="none", color="none")+
     animint2::geom_tallrect(aes(
-      xmin=prev.thresh, xmax=next.thresh),
+      xmin=offset-rect.w, xmax=offset+rect.w,
+      fill=label),
+      size=0.5,
+      help="Vertical line shows limit of target interval of acceptable penalty values, with respect to the label in selected data sequence.",
+      data=train.long[, offset := value-pred.log.lambda],
+      showSelected=c("model.name","label","profile.chrom"))+
+    animint2::geom_tallrect(aes(
+      xmin=min.thresh, xmax=max.thresh),
       alpha=0.2,
+      help="Grey rectangle shows selected threshold.",
       clickSelects=c(selector="mid.thresh"),
       showSelected="model.name",
       data=roc[
@@ -332,29 +364,32 @@ viz <- animint(
     geom_vline(aes(
       xintercept=mid.thresh, color=model.name,
       key=model.name),
+      help="Vertical line shows selected threshold.",
       showSelected=c(selector="mid.thresh", "model.name"),
       data=roc)+
     geom_segment(aes(
-      prev.thresh, errors,
+      min.thresh, errors,
       color=model.name,
-      xend=next.thresh, yend=errors),
+      xend=max.thresh, yend=errors),
       clickSelects="model.name",
+      help="Segments represent total number of label errors, as a function of constant/threshold added to log(penalty).",
       alpha=0.8,
       size=4,
       data=roc)+
     ylab("total incorrect labels")+
     xlab("Constant added to log(penalty)")+
-    scale_fill_manual(values=thresh.colors)+
+    scale_fill_manual(values=c(thresh.colors, breakpoint.colors))+
     scale_color_manual(values=model.colors)+
     geom_point(aes(
-    (max.thresh+min.thresh)/2, errors,
-    color=model.name,
-    fill=threshold),
-    showSelected=c("model.name","threshold"),
-    clickSelects=c(selector="mid.thresh"),
-    data=roc[threshold!="other",],
-    size=4,
-    shape=21),
+      x=(max.thresh+min.thresh)/2, errors,
+      color=model.name,
+      fill=threshold),
+      help="Dots represent predicted model, and min error models.",
+      showSelected=c("model.name","threshold"),
+      clickSelects=c(selector="mid.thresh"),
+      data=roc[threshold!="other",],
+      size=4,
+      shape=21),
   regression=ggplot()+
     theme_bw()+
     theme(
@@ -372,6 +407,7 @@ viz <- animint(
           ifelse(sign.residual==1, "high", "low"),
           total.residual, intervals,
           possible[, ifelse(sign.residual==1, positive, negative)]))),
+      help="Error rates with respect to the target interval of acceptable penalty values.",
       data=total.labels[
       , selector := paste0(model.name,".thresh")
       ],
@@ -379,11 +415,11 @@ viz <- animint(
       hjust=0)+
     geom_abline(aes(
       slope=slope,
-      ##showSelected=model.name,
       key=model.name,
       color=model.name,
       intercept=intercept+mid.thresh),
       showSelected=c(selector="mid.thresh"),
+      help="Regression lines, for predicting log(penalty) values.",
       data=all.reg.lines[
       , selector := paste0(model.name,'.thresh')
       ])+
@@ -393,6 +429,7 @@ viz <- animint(
       key=paste(model.name, profile.id, chromosome),
       color=model.name),
       size=1,
+      help="Segments represent residuals/errors with respect to the target interval of acceptable penalty values.",
       showSelected=c(selector="mid.thresh"),
       data=residual.thresh.pred[
       , selector := paste0(model.name,'.thresh')
@@ -402,6 +439,7 @@ viz <- animint(
       key=paste(model.name, profile.id, chromosome),
       size=status,
       color=model.name),
+      help="A dot is drawn at the predicted log(penalty) value, for each data sequence with a prediction error, with respect to the target interval of acceptable penalty values.",
       showSelected=c(selector="mid.thresh"),
       data=residual.thresh.pred[
       , status := ifelse(residual==0, "correct", "error")
@@ -411,39 +449,12 @@ viz <- animint(
       feature, value,
       fill=label),
       showSelected="label",
+      help="Dots represent limits of the target interval of acceptable penalty values.",
       clickSelects="profile.chrom",
       data=train.long,
       alpha=0.8,
       size=4,
       shape=21)+
-    ## geom_point(aes(
-    ##   feature, min.log.lambda,
-    ##   ##showSelected=model.name,
-    ##   fill=limit),
-    ##   clickSelects="profile.chrom",
-    ##   data=data.table(
-    ##     limit="min", train.dt[is.finite(min.log.lambda),]),
-    ##   alpha=0.8,
-    ##   size=4,
-    ##   shape=21)+
-    ## geom_point(aes(
-    ##   feature, max.log.lambda,
-    ##   ##showSelected=model.name,
-    ##   fill=limit),
-    ##   clickSelects="profile.chrom",
-    ##   data=data.table(
-    ##     limit="max", train.dt[is.finite(max.log.lambda),]),
-    ##   size=4,
-    ##   alpha=0.8,
-    ##   shape=21)+
-    ## geom_point(aes(
-    ##   feature,
-    ##   pred.log.lambda+mid.thresh,
-    ##   color=model.name),
-    ##   showSelected=c(selector="mid.thresh", "profile.chrom"),
-    ##   data=selection.thresh[
-    ##   , selector := paste0(model.name,'.thresh')
-    ##   ])+
     guides(color="none")+
     scale_fill_manual(values=breakpoint.colors)+
     scale_color_manual(values=model.colors)+
@@ -457,6 +468,7 @@ viz <- animint(
       FPR, TPR,
       color=model.name,
       label=sprintf("AUC = %.4f", auc)),
+      help="AUC = Area Under the ROC Curve.",
       clickSelects="model.name",
       hjust=0,
       data=auc)+
@@ -465,6 +477,7 @@ viz <- animint(
       color=model.name,
       group=model.name),
       clickSelects="model.name",
+      help="The Receiver Operating Characteristic (ROC) curve is a plot of True Positive Rate versus False Positive Rate, as the prediction threshold is varied.",
       size=4,
       alpha=0.8,
       data=roc)+
@@ -476,29 +489,22 @@ viz <- animint(
       breaks=seq(0, 1, by=0.2))+
     scale_fill_manual(values=thresh.colors, breaks=names(thresh.colors))+
     scale_color_manual(values=model.colors, breaks=names(model.colors))+
-    ## geom_point(aes(FPR, TPR,
-    ##                showSelected.variable=paste0(model.name, ".thresh"),
-    ##                showSelected.value=mid.thresh,
-    ##                showSelected2=threshold,
-    ##                showSelected=model.name),
-    ##            data=roc,
-    ##            color="grey",
-    ##            size=6,
-    ##            shape=21)+
     geom_text(aes(
       FPR+0.05, TPR,
       label=sprintf(
         "Predicted FPR=%.2f TPR=%.2f",
         FPR, TPR)),
       hjust=0,
+      help="FPR and TPR at predicted threshold.",
       data=roc[threshold=="predicted"],
-      showSelected="model.name",
+      showSelected=c("model.name","threshold"),
       color=thresh.colors[["predicted"]])+
     geom_point(aes(
       FPR, TPR,
       color=model.name, fill=threshold),
       clickSelects=c(selector="mid.thresh"),
       showSelected="model.name",
+      help="Each dot on the ROC curve corresponds to an interval of thresholds, or constants which could be added to the predicted scores.",
       data=roc,
       size=4,
       alpha=0.7,
@@ -506,6 +512,7 @@ viz <- animint(
     coord_equal(),
   first=list(profile.chrom="8 2"),
   duration=list(),
+  video="https://vimeo.com/1051547245",
   out.dir="figure-regression-interactive-some",
   source="https://github.com/tdhock/change-tutorial/blob/master/figure-regression-interactive-some.R",
   selector.types=list(model.name="single"))
@@ -515,6 +522,7 @@ for(row.i in 1:nrow(pred.thresh.only)){
   viz$first[[paste0(r$model.name, ".thresh")]] <- r$mid.thresh
   viz$duration[[paste0(r$model.name, ".thresh")]] <- 2000
 }
+
 viz
 if(FALSE){
   animint2pages(viz, "2024-08-bic-learned-details")
